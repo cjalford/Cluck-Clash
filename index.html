@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cluck Clash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<!-- PeerJS: online play when the page is hosted outside claude.ai (GitHub Pages, Netlify, itch.io) -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#bfe0f2; --ink:#1d2a33; --muted:#4b6070; --frame:#3e2a1c; --frame-out:#7fb24f;
+  --cap:#f6f2e6; --cap-edge:#9c8a6a; --p1:#a26a00; --p2:#0f6f93;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1820; --ink:#e6eef2; --muted:#93a8b6; --frame:#5a3d28; --frame-out:#3f6b2a;
+    --cap:#1f2c36; --cap-edge:#3d5262; --p1:#ffd65a; --p2:#6ed6ff;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1820; --ink:#e6eef2; --muted:#93a8b6; --frame:#5a3d28; --frame-out:#3f6b2a;
+  --cap:#1f2c36; --cap-edge:#3d5262; --p1:#ffd65a; --p2:#6ed6ff;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0;min-height:100%}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Silkscreen", ui-monospace, "Courier New", monospace;
+}
+main{height:100%;width:100%;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;background:#4e9be0;overflow:hidden;flex:none}
+.stage:focus-visible{outline:3px dashed var(--ink);outline-offset:10px}
+#screen{display:block;width:100%;height:100%;image-rendering:pixelated}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4%;}
+.overlay[hidden]{display:none}
+.panel{
+  background:rgba(18,14,30,.80); color:#fff6e4; border:3px solid #fff6e4;
+  box-shadow:0 0 0 3px #1a1020, 6px 6px 0 3px rgba(0,0,0,.35);
+  padding:clamp(10px,2.6vw,22px); max-width:100%; max-height:100%; overflow:auto; text-align:center;
+}
+.panel h2{margin:0 0 .5em;font-size:clamp(14px,2.6vw,22px);color:#ffd65a;font-weight:700}
+.panel p{margin:.4em 0;font-size:clamp(9px,1.5vw,13px);line-height:1.6}
+.logo{margin:0;font-size:clamp(26px,6.6vw,58px);font-weight:700;color:#ffd65a;line-height:1;
+  text-shadow:3px 3px 0 #a3401f, 6px 6px 0 #1a1020}
+.tagline{color:#fff6e4;margin:.6em 0 1.1em !important}
+.stack{display:flex;flex-direction:column;gap:10px;align-items:stretch;min-width:min(320px,70vw)}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;align-items:center}
+button.pix{
+  font-family:inherit; font-size:clamp(10px,1.7vw,14px); color:#1a1020; cursor:pointer;
+  background:#fff6e4; border:3px solid #1a1020; border-bottom-width:6px; padding:.55em 1em; line-height:1.2;
+}
+button.pix:hover{background:#ffe9a8}
+button.pix:active{border-bottom-width:3px;transform:translateY(3px)}
+button.pix:focus-visible{outline:3px dashed #ffd65a;outline-offset:3px}
+button.pix[disabled]{opacity:.45;cursor:not-allowed}
+button.pix.go{background:#ffd65a}
+button.pix.small{font-size:clamp(9px,1.3vw,12px);padding:.35em .7em}
+.seg{display:flex;justify-content:center;gap:0}
+.seg button{font-family:inherit;font-size:clamp(9px,1.4vw,12px);padding:.35em .8em;cursor:pointer;
+  background:transparent;color:#fff6e4;border:2px solid #fff6e4;margin-left:-2px}
+.seg button[aria-pressed="true"]{background:#fff6e4;color:#1a1020}
+.seg button:focus-visible{outline:2px dashed #ffd65a;outline-offset:2px}
+.pickers{display:flex;gap:clamp(10px,3vw,30px);justify-content:center;flex-wrap:wrap}
+.picker{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:150px}
+.picker h3{margin:0;font-size:clamp(11px,1.9vw,15px)}
+.picker canvas{width:96px;height:120px;image-rendering:pixelated}
+.choice{display:flex;align-items:center;gap:6px;font-size:clamp(9px,1.4vw,12px)}
+.choice span{min-width:11em}
+.choice button{font-family:inherit;background:transparent;color:#fff6e4;border:2px solid #fff6e4;cursor:pointer;
+  width:2em;height:2em;line-height:1}
+.choice button:disabled{opacity:.3;cursor:default}
+.ready{color:#8ff08a}
+.hint{color:#c9c2dc}
+.code{font-size:clamp(26px,6vw,48px);letter-spacing:.18em;color:#ffd65a;margin:.2em 0}
+input.codebox{font-family:inherit;font-size:clamp(14px,2.4vw,20px);width:6.5em;text-transform:uppercase;letter-spacing:.2em;
+  text-align:center;padding:.3em;background:#fff6e4;color:#1a1020;border:3px solid #1a1020}
+input.codebox:focus-visible{outline:3px dashed #ffd65a;outline-offset:2px}
+.games{display:flex;flex-direction:column;gap:6px;margin:.4em 0}
+.help{display:grid;grid-template-columns:1fr 1fr;gap:10px 30px;max-width:760px;width:100%;text-align:left}
+.help .who{margin:0 0 6px;font-weight:700;font-size:clamp(10px,1.6vw,14px)}
+.help .p1{color:#ffd65a} .help .p2{color:#6ed6ff}
+.help dl{margin:0;display:grid;gap:5px}
+.help dl div{display:flex;gap:10px;align-items:center}
+.help dt{width:4.6em;flex:none;color:#c9c2dc;font-size:clamp(9px,1.3vw,12px)}
+.help dd{margin:0;display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:clamp(8px,1.2vw,11px);color:#c9c2dc}
+kbd{font-family:inherit;font-size:clamp(8px,1.2vw,11px);color:#1a1020;background:#fff6e4;border:2px solid #1a1020;
+  border-bottom-width:4px;padding:1px 6px;min-width:1.9em;text-align:center}
+.notes{grid-column:1/-1;margin:0;font-size:clamp(8px,1.2vw,11px);line-height:1.8;color:#c9c2dc;max-width:72ch}
+.touch-only{display:none}
+@media (pointer:coarse){.touch-only{display:block;color:var(--ink)}}
+@media (max-width:620px){.help{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main id="main">
+  <div class="stage" id="stage" tabindex="0" aria-label="Cluck Clash game">
+    <canvas id="screen" width="384" height="216"></canvas>
+
+    <div class="overlay" id="scr-title">
+      <div class="panel">
+        <p class="logo">Cluck Clash</p>
+        <p class="tagline">Last chicken standing wins</p>
+        <div class="stack">
+          <button class="pix go" data-act="cpu">Play vs computer</button>
+          <div class="seg" role="group" aria-label="Computer difficulty">
+            <button data-diff="0">Easy</button><button data-diff="1">Normal</button><button data-diff="2">Hard</button>
+          </div>
+          <button class="pix" data-act="local">Two players, one keyboard</button>
+          <button class="pix" data-act="online">Play online</button>
+          <div class="row">
+            <button class="pix small" data-act="help">Controls</button>
+            <button class="pix small" data-act="fullscreen" data-fs>Full screen</button>
+          </div>
+        </div>
+        <p class="hint touch-only">Cluck Clash needs a physical keyboard.</p>
+      </div>
+    </div>
+
+    <div class="overlay" id="scr-custom" hidden>
+      <div class="panel">
+        <h2>Choose your chicken</h2>
+        <div class="pickers">
+          <div class="picker" id="pick0"></div>
+          <div class="picker" id="pick1"></div>
+        </div>
+        <p class="hint" id="custom-hint">Each chicken needs a different breed. Hats are just for style.</p>
+        <div class="row"><button class="pix small" data-act="back">Back</button></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="scr-online" hidden>
+      <div class="panel">
+        <h2>Play online</h2>
+        <div id="online-body"></div>
+        <div class="row" style="margin-top:12px"><button class="pix small" data-act="back">Back</button></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="scr-pause" hidden>
+      <div class="panel">
+        <h2 id="pause-title">Paused</h2>
+        <div class="stack">
+          <button class="pix go" data-act="resume">Keep playing</button>
+          <button class="pix" data-act="quit">Quit to title</button>
+          <div class="row">
+            <button class="pix small" data-act="help">Controls</button>
+            <button class="pix small" data-act="fullscreen" data-fs>Full screen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="scr-over" hidden>
+      <div class="panel">
+        <canvas id="winner-art" width="80" height="100" style="width:96px;height:120px;image-rendering:pixelated"></canvas>
+        <h2 id="over-title">Winner</h2>
+        <p id="over-score"></p>
+        <div class="row" id="over-buttons"></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="scr-msg" hidden>
+      <div class="panel">
+        <h2 id="msg-title"></h2>
+        <p id="msg-body"></p>
+        <div class="row"><button class="pix" data-act="quit">Back to title</button></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="scr-help" hidden>
+      <div class="panel">
+        <h2>Controls</h2>
+  <section class="help" aria-label="Controls">
+    <div>
+      <p class="who p1">Player 1</p>
+      <dl>
+        <div><dt>Move</dt><dd><kbd>A</kbd><kbd>D</kbd></dd></div>
+        <div><dt>Jump</dt><dd><kbd>W</kbd> again in the air to flap, hold to glide</dd></div>
+        <div><dt>Squat</dt><dd><kbd>S</kbd> plus <kbd>W</kbd> drops through a ledge</dd></div>
+        <div><dt>Attack</dt><dd><kbd>F</kbd></dd></div>
+        <div><dt>Pick up</dt><dd><kbd>G</kbd></dd></div>
+      </dl>
+    </div>
+    <div>
+      <p class="who p2">Player 2</p>
+      <dl>
+        <div><dt>Move</dt><dd><kbd>←</kbd><kbd>→</kbd></dd></div>
+        <div><dt>Jump</dt><dd><kbd>↑</kbd></dd></div>
+        <div><dt>Squat</dt><dd><kbd>↓</kbd> plus <kbd>↑</kbd> drops through a ledge</dd></div>
+        <div><dt>Attack</dt><dd><kbd>/</kbd> or <kbd>Right Ctrl</kbd></dd></div>
+        <div><dt>Pick up</dt><dd><kbd>.</kbd> or <kbd>Right Shift</kbd></dd></div>
+      </dl>
+    </div>
+    <p class="notes">Online, you can use either set of keys. Esc pauses (online it opens the leave menu), M mutes. Squatting makes you shorter, so a standing chicken’s shots fly over you. The Thunder Railgun is the only weapon that shoots through walls. If keys don’t respond, click the arena first.</p>
+  </section>
+        <div class="row" style="margin-top:12px"><button class="pix" data-act="help-back">Back</button></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+/* =========================================================================
+   Cluck Clash: browser edition
+   ========================================================================= */
+const W = 384, H = 216, T = 8, COLS = 48, ROWS = 27, STEP = 1 / 60, WIN_SCORE = 5;
+const GRAVITY = 720, MOVE_SPEED = 88, CROUCH_SPEED = 32, JUMP_V = 250, FLAP_V = 195;
+const GLIDE_FALL = 55, MAX_FALL = 340, BODY_W = 8, STAND_H = 10, CROUCH_H = 6, MAX_HP = 100;
+const CW = 16, CH = 20, OX = 2, OY = 8;
+const WHITE = "#fff6e4", INK = "#1a1020", YELLOW = "#ffd65a";
+const P_COLORS = ["#ffd65a", "#6ed6ff"];
+const DIFF_NAMES = ["Easy", "Normal", "Hard"];
+const DIFFICULTY = {
+  Easy:   { think: 0.45, aim: 0.45, dodge: 0.10, wobble: 0.6 },
+  Normal: { think: 0.25, aim: 0.22, dodge: 0.40, wobble: 0.3 },
+  Hard:   { think: 0.12, aim: 0.08, dodge: 0.75, wobble: 0.1 },
+};
+
+const sgn = v => (v > 0) - (v < 0);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rint = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const rchoice = arr => arr[Math.floor(Math.random() * arr.length)];
+const hex = c => "#" + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+const lerpCol = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function makeCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+function flipCanvas(src) {
+  const c = makeCanvas(src.width, src.height), x = c.getContext("2d");
+  x.translate(src.width, 0); x.scale(-1, 1); x.drawImage(src, 0, 0); return c;
+}
+function pixCircle(ctx, cx, cy, r, col) {
+  ctx.fillStyle = col;
+  for (let dy = -r; dy <= r; dy++) {
+    const dx = Math.floor(Math.sqrt(r * r - dy * dy));
+    ctx.fillRect(cx - dx, cy + dy, dx * 2 + 1, 1);
+  }
+}
+function pixRing(ctx, cx, cy, r, col) {
+  ctx.fillStyle = col;
+  const n = Math.max(8, Math.floor(r * 6.3));
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2;
+    ctx.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), 1, 1);
+  }
+}
+function pixLine(ctx, x0, y0, x1, y1, col) {
+  ctx.fillStyle = col;
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), 1, 1);
+}
+
+/* ------------------------------------------------------------------ chickens */
+const BREEDS = [
+  { name: "White Leghorn",    body: [246, 243, 234], dark: [206, 199, 184], tail: [222, 216, 202], eye: [24, 20, 20] },
+  { name: "Rhode Island Red", body: [156, 64, 34],   dark: [108, 42, 22],   tail: [46, 34, 32],    eye: [24, 20, 20] },
+  { name: "Buff Orpington",   body: [232, 184, 104], dark: [196, 146, 72],  tail: [186, 132, 60],  eye: [24, 20, 20] },
+  { name: "Black Australorp", body: [44, 44, 52],    dark: [30, 56, 50],    tail: [24, 44, 40],    eye: [236, 204, 96] },
+  { name: "Barred Rock",      body: [172, 172, 174], dark: [80, 80, 86],    tail: [72, 72, 78],    eye: [24, 20, 20], pattern: "barred" },
+  { name: "Speckled Sussex",  body: [146, 74, 40],   dark: [98, 48, 26],    tail: [40, 30, 28],    eye: [24, 20, 20], pattern: "speckled" },
+];
+const COMB = [222, 44, 44], BEAK = [246, 176, 46], LEGS = [236, 160, 40];
+const CHICK_STAND = [
+  "........RR..", ".......BBBB.", ".......BBEBO", "T......BBBBO", "TT....BBBRR.", "TBBBBBBBBB..",
+  ".BBDDDDBBB..", ".BBBDDDBBB..", "..BBBBBBB...", "....L..L....", "...LL.LL....",
+];
+const LEG_FRAMES = {
+  idle: ["....L..L....", "...LL.LL...."], walk0: ["....L..L....", "...LL.LL...."],
+  walk1: [".....LL.....", "....LLLL...."], air: ["....LLL.....", "............"],
+};
+const CHICK_CROUCH = [
+  "............", "............", "............", "............", "........RR..", "T......BBEBO",
+  "TTBBBBBBBBRO", ".BBDDDDBBB..", ".BBBDDDBBB..", "..BBBBBBB...", "...LL.LL....",
+];
+const HATS = [
+  { name: "No hat", rows: null },
+  { name: "Cowboy hat", sink: 0, colors: { c: [140, 90, 48], b: [70, 44, 24] }, rows: ["...ccc...", "..ccccc..", "..cbbbc..", "ccccccccc"] },
+  { name: "Knight helmet", sink: 2, colors: { m: [176, 182, 192], k: [40, 40, 50], p: [222, 50, 50] }, rows: ["..p..", ".mmm.", "mmmmm", "mmkkm", "mmmmm"] },
+  { name: "Crown", sink: 0, colors: { y: [250, 206, 60], r: [220, 40, 70], g: [70, 200, 120] }, rows: ["y.y.y", "yyyyy", "yrygy"] },
+  { name: "Top hat", sink: 0, colors: { k: [34, 32, 40], r: [190, 40, 50] }, rows: [".kkkk.", ".kkkk.", ".kkkk.", ".rrrr.", "kkkkkk"] },
+  { name: "Viking helmet", sink: 1, colors: { h: [240, 230, 200], m: [150, 156, 166], b: [110, 80, 50] }, rows: ["h......h", "h......h", ".hmmmmh.", "..mmmm..", "..bbbb.."] },
+  { name: "Party hat", sink: 0, colors: { w: [255, 255, 255], p: [70, 140, 240], y: [255, 210, 70] }, rows: ["..w..", "..p..", ".pyp.", ".ypy.", "pypyp"] },
+  { name: "Propeller cap", sink: 0, colors: { r: [220, 50, 50], b: [60, 120, 230], k: [40, 40, 40] }, rows: [".rrkbb.", "...k...", "..rrbb.", ".rrrbbb"] },
+  { name: "Chef hat", sink: 0, colors: { w: [252, 252, 252], g: [196, 196, 210] }, rows: [".wwg.", "wwwwg", "wwwwg", ".wwg.", ".wwg."] },
+];
+const chickCache = new Map();
+function chickenSprite(breed, hat, crouch, legs, facing, flash) {
+  const key = `${breed}|${hat}|${crouch ? 1 : 0}|${legs}|${facing}|${flash ? 1 : 0}`;
+  let s = chickCache.get(key);
+  if (s) return s;
+  const b = BREEDS[breed];
+  let tpl, headRow;
+  if (crouch) { tpl = CHICK_CROUCH.slice(); if (legs === "walk1") tpl[10] = "....LLLL...."; headRow = 4; }
+  else { tpl = CHICK_STAND.slice(); [tpl[9], tpl[10]] = LEG_FRAMES[legs] || LEG_FRAMES.idle; headRow = 0; }
+  s = makeCanvas(CW, CH);
+  const x = s.getContext("2d");
+  const cmap = { B: b.body, D: b.dark, T: b.tail, E: b.eye, R: COMB, O: BEAK, L: LEGS };
+  for (let r = 0; r < tpl.length; r++) for (let c = 0; c < tpl[r].length; c++) {
+    const ch = tpl[r][c];
+    if (ch === ".") continue;
+    let col = cmap[ch];
+    if (ch === "B") {
+      if (b.pattern === "barred" && r % 2 === 1) col = b.dark;
+      else if (b.pattern === "speckled" && (c * 7 + r * 3) % 5 === 0) col = [236, 226, 206];
+    }
+    x.fillStyle = flash ? WHITE : hex(col);
+    x.fillRect(OX + c, OY + r, 1, 1);
+  }
+  const h = HATS[hat];
+  if (h.rows) {
+    const hw = Math.max(...h.rows.map(r => r.length)), hh = h.rows.length;
+    const x0 = Math.trunc(OX + 9 - hw / 2), y0 = OY + headRow - hh + 1 + (h.sink || 0);
+    for (let r = 0; r < hh; r++) for (let c = 0; c < h.rows[r].length; c++) {
+      const ch = h.rows[r][c];
+      if (ch === ".") continue;
+      x.fillStyle = flash ? WHITE : hex(h.colors[ch]);
+      x.fillRect(x0 + c, y0 + r, 1, 1);
+    }
+  }
+  if (facing < 0) s = flipCanvas(s);
+  chickCache.set(key, s);
+  return s;
+}
+
+/* ------------------------------------------------------------------ weapons */
+const WCOL = {
+  g: [150, 156, 166], k: [52, 54, 62], b: [120, 78, 42], y: [250, 210, 70], h: [86, 160, 60], s: [214, 222, 232],
+  w: [250, 248, 240], o: [96, 120, 60], r: [214, 52, 48], p: [132, 80, 200], c: [110, 240, 250], e: [255, 140, 40],
+  n: [230, 180, 60], d: [90, 60, 34],
+};
+const WEAPONS = {
+  pistol:  { name: "Pistol", kind: "gun", proj: "bullet", dmg: 22, ammo: 12, cd: 0.30, speed: 300, spread: 0.02, pellets: 1, life: 1.3, kb: 70, weight: 4, range: [30, 150], sound: "shoot", sprite: ["gggggg", "gkk...", "gk...."] },
+  shotgun: { name: "Shotgun", kind: "gun", proj: "pellet", dmg: 13, ammo: 6, cd: 0.75, speed: 270, spread: 0.26, pellets: 6, life: 0.30, kb: 45, recoil: 90, weight: 3, range: [10, 55], sound: "blast", sprite: ["bbbkkkkkkk", "bb..kkk..."] },
+  corn:    { name: "Corn Blaster", kind: "gun", proj: "kernel", dmg: 7, ammo: 45, cd: 0.075, speed: 300, spread: 0.08, pellets: 1, life: 1.0, kb: 25, weight: 3, range: [30, 130], sound: "pop", sprite: ["hhyyyyyy.", "hyyyyyyyy", "hhyyyyyy."] },
+  sword:   { name: "Sword", kind: "melee", dmg: 40, cd: 0.42, reach: 15, kb: 170, weight: 3, bar: 1, sound: "swing", sprite: [".n........", "dnssssssss", ".n........"] },
+  pan:     { name: "Frying Pan", kind: "melee", dmg: 26, cd: 0.50, reach: 13, kb: 300, weight: 3, bar: 1, sound: "swing", sprite: [".....kkk.", "dddkkkkkk", ".....kkk."] },
+  rocket:  { name: "Rocket Launcher", kind: "gun", proj: "rocket", dmg: 75, radius: 28, ammo: 3, cd: 1.0, speed: 170, spread: 0, pellets: 1, life: 3.0, kb: 300, recoil: 60, weight: 2, range: [50, 170], sound: "launch", sprite: ["oooooooooor", "kooooooooor", ".k.k......."] },
+  egg:     { name: "Egg Grenades", kind: "gun", proj: "egg", dmg: 60, radius: 24, ammo: 4, cd: 0.6, speed: 170, spread: 0, pellets: 1, life: 1.5, kb: 260, weight: 3, bar: 1, range: [40, 110], sound: "throw", sprite: [".w.", "www", "www", ".w."] },
+  staff:   { name: "Fireball Staff", kind: "gun", proj: "fire", dmg: 30, ammo: 6, cd: 0.55, speed: 165, spread: 0, pellets: 1, life: 2.5, kb: 90, bounces: 2, weight: 2, bar: 1, range: [30, 140], sound: "fire", sprite: ["........ee", "dddddddden", "........ee"] },
+  rail:    { name: "Thunder Railgun", kind: "beam", dmg: 80, ammo: 2, cd: 1.1, charge: 0.45, kb: 240, weight: 1, range: [40, 300], sound: "rail", sprite: ["pppppppcc.", "kpppppcccc", "kk........"] },
+};
+const UNARMED = { name: "Peck", kind: "melee", dmg: 9, cd: 0.35, reach: 9, kb: 110, sound: "peck" };
+const WK = Object.keys(WEAPONS);
+const PK = ["bullet", "pellet", "kernel", "rocket", "egg", "fire"];
+const weaponCache = new Map();
+function weaponSprite(key, facing = 1) {
+  const k = key + facing;
+  let s = weaponCache.get(k);
+  if (s) return s;
+  const rows = WEAPONS[key].sprite;
+  s = makeCanvas(Math.max(...rows.map(r => r.length)), rows.length);
+  const x = s.getContext("2d");
+  rows.forEach((row, y) => [...row].forEach((ch, i) => { if (ch !== ".") { x.fillStyle = hex(WCOL[ch]); x.fillRect(i, y, 1, 1); } }));
+  if (facing < 0) s = flipCanvas(s);
+  weaponCache.set(k, s);
+  return s;
+}
+function randomWeapon() {
+  const total = WK.reduce((a, k) => a + WEAPONS[k].weight, 0);
+  let r = Math.random() * total;
+  for (const k of WK) { r -= WEAPONS[k].weight; if (r <= 0) return k; }
+  return WK[0];
+}
+
+/* ------------------------------------------------------------------ maps */
+// Each row is the LEFT half (24 tiles); the right half mirrors it.
+// '#' grassy dirt block (solid, stops bullets)  '=' wooden ledge (jump up through, squat + jump to drop, bullets pass)
+const MAPS = [
+  { name: "Sunny Meadow", sky: "noon", spawn: [5, 24], half: [
+    "........................", "........................", "........................", "....======..............",
+    "........................", "........................", "..............======....", "........................",
+    "........................", "#####...................", "........................", "...........=====........",
+    "......................##", "......................##", "........................", "..=====.................",
+    "....................====", "........................", "..........######........", "..........######........",
+    "........................", "....====................", "........................", "........................",
+    "##......................", "########################", "########################"] },
+  { name: "Twin Towers", sky: "morning", spawn: [8, 24], half: [
+    "........................", "........................", "........................", ".........======.........",
+    "........................", "........................", "..====..............====", "........................",
+    "...............##.......", "...............##.......", ".........======##.......", "...............##.......",
+    "...............##..=====", "...............##.......", "..=====........##.......", "........................",
+    "........................", "...................=====", "...............##.......", "...............##.......",
+    "........======.##.......", "...............##.......", "...................=====", "...............##.......",
+    "..====.........##.......", "########################", "########################"] },
+  { name: "Hillside Steps", sky: "afternoon", spawn: [3, 18], half: [
+    "........................", "........................", "........................", "..======................",
+    "........................", "................=====...", "........................", "######..................",
+    "######..................", "........................", "..........======........", "........................",
+    "........................", "....................####", "....................####", "........................",
+    ".....=====..............", "........................", "........................", "########.........=======",
+    "########................", "############............", "############............", "################........",
+    "################........", "########################", "########################"] },
+  { name: "Floating Isles", sky: "golden", spawn: [4, 24], half: [
+    "........................", "........................", "........................", "........######..........",
+    "........######..........", "........................", "........................", "..====..............====",
+    "........................", "........................", "............#####.......", "............#####.......",
+    "........................", "###.....................", "###...............======", "........................",
+    "........................", "......######............", "......######............", "........................",
+    "........................", "..====..............====", "........................", "........................",
+    "..........##............", "########################", "########################"] },
+];
+const SKIES = {
+  noon:      { top: [78, 160, 232],  bottom: [186, 228, 255], sun: [255, 244, 170], sunPos: [330, 34], hillFar: [150, 206, 150], hillNear: [108, 180, 98] },
+  morning:   { top: [120, 176, 236], bottom: [255, 214, 180], sun: [255, 236, 190], sunPos: [52, 60],  hillFar: [160, 200, 150], hillNear: [116, 172, 100] },
+  afternoon: { top: [92, 170, 238],  bottom: [210, 238, 255], sun: [255, 248, 200], sunPos: [262, 26], hillFar: [140, 198, 140], hillNear: [98, 170, 90] },
+  golden:    { top: [108, 128, 210], bottom: [255, 196, 128], sun: [255, 214, 110], sunPos: [300, 74], hillFar: [170, 170, 120], hillNear: [120, 150, 84] },
+};
+const GRASS_HI = "#84d660", GRASS = "#54b246", GRASS_DK = "#3a8c3a";
+const DIRT = "#8a5c36", DIRT_DK = "#684228", DIRT_LT = "#a67446", DIRT_EDGE = "#503220";
+const FLOWERS = ["#f04650", "#ffdc46", "#fafafa", "#b478f0"];
+
+class Arena {
+  constructor(idx) {
+    const m = MAPS[idx];
+    this.idx = idx;
+    this.name = m.name;
+    this.rows = m.half.slice(0, ROWS).map(h => { h = (h + ".".repeat(24)).slice(0, 24); return h + [...h].reverse().join(""); });
+    while (this.rows.length < ROWS) this.rows.push("#".repeat(COLS));
+    const [sc, sr] = m.spawn, feet = (sr + 1) * T;
+    this.spawns = [[sc * T, feet, 1], [(COLS - 1 - sc) * T, feet, -1]];
+    this.sky = SKIES[m.sky];
+    const rng = mulberry32(hashStr(m.name));
+    this.rng = rng;
+    this.background = this.renderBackground(rng);
+    this.tiles = this.renderTiles(rng);
+    this.clouds = [];
+    for (let i = 0; i < 6; i++) this.clouds.push({ x: rng() * W, y: 6 + Math.floor(rng() * 95), sp: 2 + rng() * 5, img: this.makeCloud(rng) });
+  }
+  tile(c, r) { if (c < 0 || c >= COLS || r >= ROWS) return "#"; if (r < 0) return "."; return this.rows[r][c]; }
+  isSolid(c, r) { return this.tile(c, r) === "#"; }
+  solidAt(px, py) { return this.isSolid(Math.floor(px / T), Math.floor(py / T)); }
+  rectSolid(x, y, w, h) {
+    const c0 = Math.floor(x / T), c1 = Math.floor((x + w - 0.001) / T), r0 = Math.floor(y / T), r1 = Math.floor((y + h - 0.001) / T);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (this.isSolid(c, r)) return true;
+    return false;
+  }
+  landingTop(x, w, oldB, newB, planks = true) {
+    const c0 = Math.floor(x / T), c1 = Math.floor((x + w - 0.001) / T), r = Math.floor((newB - 0.001) / T), top = r * T;
+    for (let c = c0; c <= c1; c++) {
+      const t = this.tile(c, r);
+      if (t === "#") return top;
+      if (t === "=" && planks && oldB <= top + 0.01) return top;
+    }
+    return null;
+  }
+  onPlank(ch) {
+    const r = Math.floor((ch.y + ch.h + 0.5) / T), c0 = Math.floor(ch.x / T), c1 = Math.floor((ch.x + ch.w - 0.001) / T);
+    let plank = false;
+    for (let c = c0; c <= c1; c++) { const t = this.tile(c, r); if (t === "#") return false; if (t === "=") plank = true; }
+    return plank;
+  }
+  lineClear(x0, y0, x1, y1) {
+    const n = Math.max(1, Math.floor(Math.hypot(x1 - x0, y1 - y0) / 3));
+    for (let i = 1; i < n; i++) { const t = i / n; if (this.solidAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false; }
+    return true;
+  }
+  renderBackground(rng) {
+    const sky = this.sky, s = makeCanvas(W, H), x = s.getContext("2d");
+    const bands = 14;
+    for (let i = 0; i < bands; i++) {
+      const y0 = Math.floor(i * H / bands), y1 = Math.floor((i + 1) * H / bands);
+      x.fillStyle = hex(lerpCol(sky.top, sky.bottom, i / (bands - 1)));
+      x.fillRect(0, y0, W, y1 - y0);
+    }
+    const [sx, sy] = sky.sunPos;
+    pixCircle(x, sx, sy, 15, hex(lerpCol(sky.sun, sky.bottom, 0.45)));
+    pixCircle(x, sx, sy, 10, hex(sky.sun));
+    const ph = rng() * 6.28;
+    x.fillStyle = hex(sky.hillFar);
+    for (let i = 0; i < W; i++) { const y = Math.floor(150 + Math.sin(i * 0.018 + ph) * 12 + Math.sin(i * 0.047 + ph * 2) * 5); x.fillRect(i, y, 1, H - y); }
+    const nearY = i => Math.floor(176 + Math.sin(i * 0.026 + ph * 1.7) * 9 + Math.sin(i * 0.07) * 3);
+    const treeCol = hex(lerpCol(sky.hillNear, [40, 90, 40], 0.25));
+    for (let k = 0; k < 7; k++) {
+      const tx = 10 + Math.floor(rng() * (W - 20)), ty = nearY(tx);
+      x.fillStyle = "#604228"; x.fillRect(tx, ty - 5, 1, 5);
+      pixCircle(x, tx, ty - 8, 4, treeCol);
+    }
+    x.fillStyle = hex(sky.hillNear);
+    for (let i = 0; i < W; i++) { const y = nearY(i); x.fillRect(i, y, 1, H - y); }
+    return s;
+  }
+  makeCloud(rng) {
+    const w = 26 + Math.floor(rng() * 21), h = 10 + Math.floor(rng() * 6), s = makeCanvas(w, h + 3), x = s.getContext("2d");
+    const n = 3 + Math.floor(rng() * 3), blobs = [];
+    for (let i = 0; i < n; i++) {
+      const r = Math.floor(h / 3) + Math.floor(rng() * (Math.floor(h / 2) - Math.floor(h / 3) + 1));
+      blobs.push([Math.floor(h / 2) + Math.floor(rng() * (w - h)), r]);
+    }
+    const t3 = Math.floor(h / 3);
+    for (const [cx, r] of blobs) pixCircle(x, cx, h - r + 2, r, "#cedef0");
+    x.fillStyle = "#cedef0"; x.fillRect(t3, h - t3 + 2, w - 2 * t3, t3);
+    for (const [cx, r] of blobs) pixCircle(x, cx, h - r, r, "#f6faff");
+    x.fillStyle = "#f6faff"; x.fillRect(t3, h - t3, w - 2 * t3, t3);
+    return s;
+  }
+  renderTiles(rng) {
+    const s = makeCanvas(W, H), x = s.getContext("2d"), tops = [];
+    const rr = n => Math.floor(rng() * n);
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const t = this.rows[r][c], px = c * T, py = r * T;
+      if (t === "#") {
+        x.fillStyle = DIRT; x.fillRect(px, py, T, T);
+        for (let i = 0; i < 3; i++) { x.fillStyle = rng() < 0.5 ? DIRT_DK : DIRT_LT; x.fillRect(px + rr(T), py + rr(T), 1, 1); }
+        const open = !this.isSolid(c, r - 1), g = open ? 3 : 0;
+        if (open) {
+          x.fillStyle = GRASS; x.fillRect(px, py, T, 3);
+          x.fillStyle = GRASS_HI; x.fillRect(px, py, T, 1);
+          x.fillStyle = GRASS_DK; x.fillRect(px, py + 3, T, 1);
+          tops.push([px, py]);
+        }
+        x.fillStyle = DIRT_EDGE;
+        if (!this.isSolid(c - 1, r)) x.fillRect(px, py + g, 1, T - g);
+        if (!this.isSolid(c + 1, r)) x.fillRect(px + T - 1, py + g, 1, T - g);
+        if (!this.isSolid(c, r + 1)) x.fillRect(px, py + T - 1, T, 1);
+      } else if (t === "=") {
+        x.fillStyle = GRASS_HI; x.fillRect(px, py, T, 1);
+        x.fillStyle = GRASS; x.fillRect(px, py + 1, T, 2);
+        x.fillStyle = DIRT; x.fillRect(px, py + 3, T, 2);
+        x.fillStyle = DIRT_DK; x.fillRect(px, py + 5, T, 1);
+        if (rng() < 0.5) x.fillRect(px + 1 + rr(T - 2), py + 6, 1, 1);
+        if (this.tile(c - 1, r) !== "=") x.clearRect(px, py + 4, 1, 2);
+        if (this.tile(c + 1, r) !== "=") x.clearRect(px + T - 1, py + 4, 1, 2);
+        tops.push([px, py]);
+      }
+    }
+    for (const [px, py] of tops) {
+      if (py <= 1) continue;
+      x.fillStyle = GRASS;
+      for (let i = 0; i < 2; i++) x.fillRect(px + rr(T), py - 1, 1, 1);
+      if (rng() < 0.16 && py > 2) {
+        const fx = px + 1 + rr(T - 2);
+        x.fillStyle = "#469638"; x.fillRect(fx, py - 1, 1, 1);
+        x.fillStyle = FLOWERS[rr(FLOWERS.length)]; x.fillRect(fx, py - 2, 1, 1);
+      }
+    }
+    return s;
+  }
+  drawSky(ctx, dt) {
+    ctx.drawImage(this.background, 0, 0);
+    for (const cl of this.clouds) {
+      cl.x += cl.sp * dt;
+      if (cl.x > W) cl.x = -cl.img.width;
+      ctx.drawImage(cl.img, Math.floor(cl.x), cl.y);
+    }
+  }
+}
+const arenaCache = [];
+const getArena = i => arenaCache[i] || (arenaCache[i] = new Arena(i));
+
+/* ------------------------------------------------------------------ input */
+const KEYS_P1 = { left: ["KeyA"], right: ["KeyD"], jump: ["KeyW"], crouch: ["KeyS"], shoot: ["KeyF"], pickup: ["KeyG"] };
+const KEYS_P2 = { left: ["ArrowLeft"], right: ["ArrowRight"], jump: ["ArrowUp"], crouch: ["ArrowDown"], shoot: ["Slash", "ControlRight"], pickup: ["Period", "ShiftRight"] };
+const KEYS_ANY = {};
+for (const a in KEYS_P1) KEYS_ANY[a] = KEYS_P1[a].concat(KEYS_P2[a]);
+const keysDown = new Set();
+const newInput = () => ({ left: false, right: false, jump: false, crouch: false, shoot: false, pickup: false, jump_p: false, shoot_p: false, pickup_p: false });
+
+class HumanController {
+  constructor(map) { this.map = map; this.me = null; this.prev = {}; }
+  reset() { this.prev = {}; }
+  get() {
+    const inp = newInput();
+    for (const a in this.map) inp[a] = this.map[a].some(k => keysDown.has(k));
+    inp.jump_p = inp.jump && !this.prev.jump;
+    inp.shoot_p = inp.shoot && !this.prev.shoot;
+    inp.pickup_p = inp.pickup && !this.prev.pickup;
+    this.prev = { jump: inp.jump, shoot: inp.shoot, pickup: inp.pickup };
+    return inp;
+  }
+}
+
+// Host side: turns the online guest's presence input into controller input.
+class NetController {
+  constructor() { this.me = null; this.last = null; }
+  reset() {}
+  get(game) {
+    const inp = newInput();
+    const g = game.net && game.net.guestInput();
+    if (!g) return inp;
+    const b = g.b | 0, j = g.j | 0, s = g.s | 0, p = g.p | 0;
+    if (!this.last) this.last = { j, s, p };
+    inp.left = !!(b & 1); inp.right = !!(b & 2); inp.jump = !!(b & 4);
+    inp.crouch = !!(b & 8); inp.shoot = !!(b & 16); inp.pickup = !!(b & 32);
+    inp.jump_p = j !== this.last.j;
+    inp.shoot_p = s !== this.last.s;
+    inp.pickup_p = p !== this.last.p;
+    inp.shoot = inp.shoot || inp.shoot_p;
+    this.last = { j, s, p };
+    return inp;
+  }
+}
+
+class CPUController {
+  constructor(diff) { this.p = DIFFICULTY[diff]; this.me = null; this.reset(); }
+  reset() {
+    Object.assign(this, { thinkT: 0, mode: "idle", target: null, surface: null, aimT: 0, jumpHold: 0, crouchT: 0,
+      stuckT: 0, unstuckT: 0, unstuckDir: 1, lastX: null, seen: new Set(), strafeT: 0, strafeDir: 0,
+      edgeD: 0, edgeFeet: 0, noShotT: 0 });
+  }
+  get(game, dt) {
+    const inp = newInput(), me = this.me;
+    if (!me.alive) return inp;
+    const arena = game.arena;
+    const opp = game.chickens.find(c => c !== me && c.alive) || null;
+    this.thinkT -= dt;
+    if (this.thinkT <= 0) { this.thinkT = this.p.think * rnd(0.7, 1.3); this.decide(game, opp); }
+    let dirx = 0, jumpP = false, crouch = false;
+    const [tx, ty] = this.target || [me.cx, me.feet];
+    const dy = ty - me.feet;
+    if (this.unstuckT > 0) {
+      this.unstuckT -= dt; dirx = this.unstuckDir;
+      if (me.onGround) { jumpP = true; this.jumpHold = 0.3; }
+    } else if (dy < -14 && this.surface) {
+      const [lx, into, sy] = this.surface;
+      if (me.onGround) {
+        if (Math.abs(me.cx - lx) > 3) dirx = sgn(lx - me.cx);
+        else { jumpP = true; this.jumpHold = 0.4; dirx = into; }
+      } else if (me.feet <= sy + 1) {
+        dirx = into || (Math.abs(tx - me.cx) > 4 ? sgn(tx - me.cx) : 0);
+      } else {
+        dirx = Math.abs(me.cx - lx) < 3 ? 0 : sgn(lx - me.cx);
+        if (me.vy > 20 && me.flaps > 0) { jumpP = true; this.jumpHold = 0.4; }
+      }
+    } else if (dy > 14) {
+      if (me.onGround) {
+        if (arena.onPlank(me)) { crouch = true; jumpP = true; }
+        else { dirx = this.edgeDir(arena, me, tx); this.edgeD = dirx; this.edgeFeet = me.feet; }
+      } else if (this.edgeD && me.feet < this.edgeFeet + 10) dirx = this.edgeD;
+      else dirx = Math.abs(tx - me.cx) > 6 ? sgn(tx - me.cx) : 0;
+    } else {
+      dirx = this.levelMove(game, me, opp, tx, dt);
+    }
+    if (me.onGround && dy <= 14) this.edgeD = 0;
+    if (!me.onGround && dirx && me.vy > 0 && me.flaps > 0 && arena.rectSolid(me.x + dirx * 3, me.y, me.w, me.h)) { jumpP = true; this.jumpHold = 0.4; }
+    if (me.onGround && dirx && !jumpP) {
+      if (arena.rectSolid(me.x + dirx * 3, me.y, me.w, me.h)) { jumpP = true; this.jumpHold = 0.3; }
+      else if (Math.abs(dy) <= 14 && Math.abs(tx - me.cx) > 20) {
+        const ahead = arena.tile(Math.floor((me.cx + dirx * 7) / T), Math.floor((me.feet + 0.5) / T));
+        if (ahead !== "#" && ahead !== "=") { jumpP = true; this.jumpHold = 0.35; }
+      }
+    }
+    const dodge = this.dodge(game, me, opp);
+    if (dodge === "jump" && me.onGround) { jumpP = true; this.jumpHold = 0.25; }
+    else if (dodge === "crouch") this.crouchT = 0.4;
+    const [shoot, face, wantCrouch, linedUp] = this.attack(game, me, opp, dt);
+    if (face) dirx = face;
+    else if (linedUp && dirx === -me.facing) dirx = 0;
+    if (wantCrouch) this.crouchT = Math.max(this.crouchT, 0.2);
+    if (this.crouchT > 0 && !jumpP) { crouch = true; this.crouchT -= dt; }
+    if (this.mode === "fetch") {
+      const box = inflate(me.rect(), 8, 6);
+      if (game.items.some(it => overlap(box, it.rect()))) inp.pickup_p = true;
+    }
+    if (dirx && me.onGround && this.unstuckT <= 0) {
+      if (this.lastX !== null && Math.abs(me.x - this.lastX) < 0.2) this.stuckT += dt; else this.stuckT = 0;
+      if (this.stuckT > 0.7) { this.unstuckT = 0.45; this.unstuckDir = rchoice([-1, 1]); this.stuckT = 0; }
+    }
+    this.lastX = me.x;
+    this.jumpHold -= dt;
+    inp.left = dirx < 0; inp.right = dirx > 0;
+    inp.jump_p = jumpP; inp.jump = jumpP || this.jumpHold > 0;
+    inp.crouch = crouch;
+    inp.shoot = inp.shoot_p = shoot;
+    return inp;
+  }
+  decide(game, opp) {
+    const me = this.me;
+    let items = game.items.filter(it => it.landed);
+    if (!items.length) items = game.items.slice();
+    if (me.weapon === null && items.length) {
+      if (opp && Math.abs(opp.cx - me.cx) < 18 && Math.abs(opp.cy - me.cy) < 12) { this.mode = "attack"; this.target = [opp.cx, opp.feet]; }
+      else {
+        let best = null, bs = Infinity;
+        for (const it of items) { const s = Math.abs(it.cx - me.cx) + 1.6 * Math.abs(it.y + it.h - me.feet); if (s < bs) { bs = s; best = it; } }
+        this.mode = "fetch"; this.target = [best.cx, best.y + best.h];
+      }
+    } else if (opp) {
+      this.mode = "attack"; this.target = [opp.cx, opp.feet];
+      if (Math.random() < this.p.wobble * 0.2) this.target = [rnd(20, W - 20), me.feet];
+    } else { this.mode = "idle"; this.target = null; }
+    if (!this.target || this.target[1] >= me.feet - 14) this.surface = null;
+    else if (me.onGround || !this.surface) this.surface = this.findSurface(game.arena, me, this.target[0]);
+    if (this.seen.size > 300) this.seen.clear();
+  }
+  findSurface(arena, me, tx) {
+    let best = null;
+    const feet = me.feet, myRow = Math.floor((feet - 1) / T);
+    for (let r = 0; r < ROWS; r++) {
+      const sy = r * T;
+      if (!(feet - 60 <= sy && sy <= feet - 10)) continue;
+      for (let c = 0; c < COLS; c++) {
+        const t = arena.tile(c, r);
+        if ((t !== "#" && t !== "=") || arena.isSolid(c, r - 1) || arena.isSolid(c, r - 2)) continue;
+        const options = [];
+        if (t === "=") options.push([c, 0]);
+        else for (const [nc, d] of [[c - 1, 1], [c + 1, -1]]) {
+          if (nc >= 0 && nc < COLS && arena.tile(nc, r) === "." && !arena.isSolid(nc, r - 1)) options.push([nc, d]);
+        }
+        for (const [lc, into] of options) {
+          const lx = lc * T + 4 - into * 3;
+          const cLo = Math.floor((lx - 7) / T), cHi = Math.floor((lx + 6.999) / T);
+          let blocked = false;
+          for (let rr = r - 2; rr <= myRow && !blocked; rr++) {
+            if (t === "=" && rr === r) continue;
+            for (let cc = cLo; cc <= cHi; cc++) if (arena.isSolid(cc, rr)) { blocked = true; break; }
+          }
+          if (blocked) continue;
+          const score = Math.abs(lx - me.cx) + 0.6 * Math.abs(c * T + 4 - tx);
+          if (!best || score < best[0]) best = [score, lx, into, sy];
+        }
+      }
+    }
+    return best ? best.slice(1) : null;
+  }
+  edgeDir(arena, me, tx) {
+    const fr = Math.floor((me.feet + 0.5) / T), c = Math.floor(me.cx / T);
+    const standable = t => t === "#" || t === "=";
+    if (!standable(arena.tile(c, fr))) return standable(arena.tile(Math.floor((me.x + me.w - 0.01) / T), fr)) ? -1 : 1;
+    let best = null;
+    for (const d of [-1, 1]) {
+      let cc = c, dist = 0;
+      for (;;) {
+        if (cc < 0 || cc >= COLS || arena.isSolid(cc, fr - 1)) { dist = 999; break; }
+        if (!standable(arena.tile(cc, fr))) break;
+        cc += d; dist++;
+      }
+      const score = dist + (sgn(tx - me.cx) === d ? 0 : 3);
+      if (!best || score < best[0]) best = [score, d];
+    }
+    return best[1];
+  }
+  levelMove(game, me, opp, tx, dt) {
+    if (this.mode !== "attack" || !opp) return Math.abs(tx - me.cx) > 3 ? sgn(tx - me.cx) : 0;
+    const wd = me.weapon ? WEAPONS[me.weapon] : UNARMED, dx = opp.cx - me.cx, adx = Math.abs(dx);
+    if (wd.kind === "melee") return adx > wd.reach * 0.5 ? sgn(dx) : 0;
+    const [lo, hi] = wd.range || [40, 140];
+    if (this.noShotT > 1.5) return sgn(dx);
+    if (adx > hi) return sgn(dx);
+    if (adx < lo) { const d = -sgn(dx) || 1; return game.arena.rectSolid(me.x + d * 6, me.y, me.w, me.h) ? 0 : d; }
+    this.strafeT -= dt;
+    if (this.strafeT <= 0) { this.strafeT = rnd(0.4, 1.2); this.strafeDir = rchoice([-1, 0, 0, 1]); }
+    return this.strafeDir;
+  }
+  dodge(game, me, opp) {
+    for (const p of game.projectiles) {
+      if (p.owner === me || this.seen.has(p)) continue;
+      const coming = (p.vx > 0 && p.x < me.cx) || (p.vx < 0 && p.x > me.cx);
+      if (coming && Math.abs(p.x - me.cx) < 80 && Math.abs(p.y - me.cy) < 10) {
+        this.seen.add(p);
+        if (Math.random() < this.p.dodge) {
+          if ((p.kind === "bullet" || p.kind === "kernel" || p.kind === "pellet") && p.y < me.feet - 6 && me.onGround) return "crouch";
+          return "jump";
+        }
+      }
+    }
+    if (opp && opp.chargeT > 0 && opp.y - 2 <= me.cy && me.cy <= opp.y + opp.h + 2) {
+      const key = "charge" + (opp.chargeT > 0.3 ? 1 : 0) + opp.idx;
+      if (!this.seen.has(key)) { this.seen.add(key); if (Math.random() < this.p.dodge + 0.2) return "jump"; }
+    } else { this.seen.delete("charge1" + (opp ? opp.idx : 0)); this.seen.delete("charge0" + (opp ? opp.idx : 0)); }
+    return null;
+  }
+  attack(game, me, opp, dt) {
+    if (!opp) return [false, 0, false, false];
+    const wd = me.weapon ? WEAPONS[me.weapon] : UNARMED, dx = opp.cx - me.cx, adx = Math.abs(dx);
+    const face = adx < 4 ? me.facing : sgn(dx);
+    let ok = false, wantCrouch = false;
+    if (wd.kind === "melee") ok = adx < wd.reach + 5 && Math.abs(opp.cy - me.cy) < 11;
+    else {
+      const [mx, my] = me.muzzle();
+      const lined = opp.y - 1 <= my && my <= opp.y + opp.h + 1;
+      if (wd.kind === "beam") ok = lined && adx < 320;
+      else if (wd.proj === "egg") ok = adx < 120 && opp.feet - me.feet > -30 && opp.feet - me.feet < 40 && game.arena.lineClear(me.cx, me.y - 8, opp.cx, opp.y - 8);
+      else ok = lined && adx < wd.range[1] + 30 && game.arena.lineClear(mx, my, opp.cx, my);
+      if (!lined && opp.crouch && Math.abs(opp.feet - me.feet) < 4 && !me.crouch) wantCrouch = true;
+    }
+    if (ok && me.facing !== face) return [false, face, wantCrouch, false];
+    this.aimT = ok ? this.aimT + dt : Math.max(0, this.aimT - dt * 2);
+    this.noShotT = ok ? 0 : this.noShotT + dt;
+    return [ok && this.aimT >= this.p.aim, 0, wantCrouch, ok];
+  }
+}
+
+/* ------------------------------------------------------------------ entities */
+const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const inflate = (r, dx, dy) => ({ x: r.x - Math.floor(dx / 2), y: r.y - Math.floor(dy / 2), w: r.w + dx, h: r.h + dy });
+
+class Item {
+  constructor(key, ammo, x, y, para) {
+    Object.assign(this, { key, ammo, x, y, vx: 0, vy: 0, para, landed: false, life: 24, t: 0 });
+    const s = weaponSprite(key);
+    this.w = Math.max(6, s.width); this.h = s.height + 1;
+  }
+  get cx() { return this.x + this.w / 2; }
+  rect() { return { x: Math.trunc(this.x), y: Math.trunc(this.y), w: this.w, h: this.h }; }
+  update(game, dt) {
+    this.t += dt; this.life -= dt;
+    if (this.landed) return;
+    const arena = game.arena;
+    this.vy = this.para ? Math.min(this.vy + 300 * dt, 38) : Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    if (this.vx) {
+      const nx = clamp(this.x + this.vx * dt, 0, W - this.w);
+      if (!arena.rectSolid(nx, this.y, this.w, this.h)) this.x = nx; else this.vx = 0;
+      this.vx *= Math.exp(-3 * dt);
+    }
+    const oldB = this.y + this.h;
+    this.y += this.vy * dt;
+    if (this.vy < 0 && arena.rectSolid(this.x, this.y, this.w, this.h)) { this.y -= this.vy * dt; this.vy = 0; }
+    if (this.vy > 0) {
+      const top = arena.landingTop(this.x, this.w, oldB, this.y + this.h);
+      if (top !== null) { this.y = top - this.h; this.vy = 0; this.vx = 0; this.landed = true; this.para = false; }
+    }
+    if (this.y > H) this.life = 0;
+  }
+  draw(ctx, game) {
+    if (this.life < 4 && Math.floor(this.life * 8) % 2) return;
+    const x = Math.floor(this.x), y = Math.floor(this.y);
+    if (this.para && !this.landed) {
+      const cx = x + (this.w >> 1);
+      for (let i = -5; i <= 5; i++) {
+        const hgt = 3 - Math.floor(Math.abs(i) / 2);
+        ctx.fillStyle = Math.floor(i / 2) % 2 ? "#e64646" : "#fafafa";
+        ctx.fillRect(cx + i, y - 10 + (3 - hgt), 1, hgt);
+      }
+      pixLine(ctx, cx - 5, y - 7, cx, y, "#5a5046");
+      pixLine(ctx, cx + 5, y - 7, cx, y, "#5a5046");
+    }
+    ctx.drawImage(weaponSprite(this.key), x, y);
+    if (game.chickens.some(c => c.alive && Math.abs(c.cx - this.cx) < 22 && Math.abs(c.cy - this.y) < 16))
+      game.label(WEAPONS[this.key].name, x + (this.w >> 1), y - 3, 5, WHITE, "center", "bottom");
+  }
+}
+
+class Projectile {
+  constructor(kind, x, y, vx, vy, owner, wd) {
+    Object.assign(this, { kind, x, y, vx, vy, owner, dmg: wd.dmg, kb: wd.kb, life: wd.life,
+      radius: wd.radius || 0, bounces: wd.bounces || 0, grav: kind === "egg" ? 520 : 0, alive: true });
+  }
+  update(game, dt) {
+    const arena = game.arena;
+    const steps = Math.max(1, Math.floor(Math.hypot(this.vx, this.vy) * dt / 3) + 1), sdt = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      this.vy += this.grav * sdt;
+      const nx = this.x + this.vx * sdt;
+      if (arena.solidAt(nx, this.y)) {
+        if (this.kind === "egg") this.vx *= -0.55;
+        else if (this.kind === "fire" && this.bounces > 0) { this.vx = -this.vx; this.bounces--; }
+        else return this.hitWall(game);
+      } else this.x = nx;
+      const ny = this.y + this.vy * sdt;
+      let floor = arena.solidAt(this.x, ny);
+      if (this.kind === "egg" && this.vy > 0 && !floor) {
+        const r = Math.floor(ny / T);
+        if (arena.tile(Math.floor(this.x / T), r) === "=" && this.y <= r * T) floor = true;
+      }
+      if (floor) {
+        if (this.kind === "egg") { this.vy *= -0.45; this.vx *= 0.7; if (Math.abs(this.vy) < 25) this.vy = 0; }
+        else if (this.kind === "fire" && this.bounces > 0) { this.vy = -this.vy; this.bounces--; }
+        else return this.hitWall(game);
+      } else this.y = ny;
+      for (const ch of game.chickens) if (ch.alive && ch !== this.owner && ch.contains(this.x, this.y, 1)) return this.hitChicken(game, ch);
+      if (this.x < -8 || this.x > W + 8 || this.y > H + 8 || this.y < -60) { this.alive = false; return; }
+    }
+    this.life -= dt;
+    if (this.life <= 0) {
+      if (this.kind === "egg" || this.kind === "rocket") this.explode(game); else this.alive = false;
+    }
+  }
+  hitWall(game) {
+    if (this.kind === "rocket") return this.explode(game);
+    game.burst(this.x, this.y, ["#fff0b4", "#c8beaa"], 4, 40);
+    this.alive = false;
+  }
+  hitChicken(game, ch) {
+    if (this.kind === "rocket" || this.kind === "egg") return this.explode(game);
+    ch.hurt(game, this.dmg, sgn(this.vx) * this.kb, -50);
+    this.alive = false;
+  }
+  explode(game) { this.alive = false; game.explode(this.x, this.y, this.radius, this.dmg, this.kb, this.owner); }
+}
+function drawProjectile(ctx, kind, x, y, vx, blink) {
+  x = Math.floor(x); y = Math.floor(y);
+  if (kind === "bullet") { ctx.fillStyle = "#ffec96"; ctx.fillRect(x - 1, y, 3, 1); }
+  else if (kind === "pellet") { ctx.fillStyle = "#ebebeb"; ctx.fillRect(x, y, 2, 1); }
+  else if (kind === "kernel") { ctx.fillStyle = "#fad246"; ctx.fillRect(x - 1, y - 1, 2, 2); }
+  else if (kind === "rocket") { ctx.fillStyle = "#60783c"; ctx.fillRect(x - 2, y - 1, 4, 2); ctx.fillStyle = "#d63430"; ctx.fillRect(x + (vx > 0 ? 2 : -3), y - 1, 1, 1); }
+  else if (kind === "egg") { ctx.fillStyle = blink ? "#f05050" : WHITE; ctx.fillRect(x - 1, y - 2, 3, 4); }
+  else if (kind === "fire") { pixCircle(ctx, x, y, 2, "#ff8228"); ctx.fillStyle = "#fff0a0"; ctx.fillRect(x, y, 1, 1); }
+}
+function projectileTrail(game, kind, x, y, vx) {
+  if (kind === "rocket") game.addParticle(x - sgn(vx) * 3, y, rnd(-10, 10), rnd(-15, 5), 0.4, rchoice(["#c8c8c8", "#ffb43c"]), -20);
+  else if (kind === "fire" && Math.random() < 0.7) game.addParticle(x, y, rnd(-15, 15), rnd(-25, 0), 0.3, rchoice(["#ffc850", "#ff6e28"]), -30);
+}
+
+const hpColor = hp => hex(lerpCol([230, 60, 50], [110, 220, 90], clamp(hp / MAX_HP, 0, 1)));
+
+class Chicken {
+  constructor(idx, breed, hat, ctrl, label) {
+    Object.assign(this, { idx, breed, hat, ctrl, label });
+    if (ctrl) ctrl.me = this;
+    this.spawn(0, H - 2 * T, 1);
+  }
+  spawn(x, feet, facing) {
+    Object.assign(this, { x, w: BODY_W, h: STAND_H, y: feet - STAND_H, vx: 0, vy: 0, kbx: 0, facing, hp: MAX_HP,
+      alive: true, crouch: false, onGround: true, flaps: 1, coyote: 0, dropT: 0, weapon: null, ammo: 0, cd: 0,
+      swingT: 0, chargeT: 0, swingHit: true, hurtT: 0, barT: 0, anim: 0, tagT: 0, tag: "", tagIdx: -1 });
+    if (this.ctrl) this.ctrl.reset();
+  }
+  get cx() { return this.x + this.w / 2; }
+  get cy() { return this.y + this.h / 2; }
+  get feet() { return this.y + this.h; }
+  rect() { return { x: Math.trunc(this.x), y: Math.trunc(this.y), w: this.w, h: this.h }; }
+  contains(px, py, pad = 0) { return this.x - pad <= px && px <= this.x + this.w + pad && this.y - pad <= py && py <= this.y + this.h + pad; }
+  grip() {
+    const bx = Math.trunc(this.x) - 4, by = Math.trunc(this.y + this.h) - 19;
+    return [this.facing > 0 ? bx + OX + 6 : bx + CW - 1 - (OX + 6), by + OY + (this.crouch ? 7 : 4)];
+  }
+  muzzle() {
+    const [gx, gy] = this.grip(), len = this.weapon ? weaponSprite(this.weapon).width : 4;
+    return [this.facing > 0 ? gx + len : gx - len, gy];
+  }
+  setCrouch(on) {
+    const d = STAND_H - CROUCH_H;
+    if (on && !this.crouch) { this.y += d; this.h = CROUCH_H; this.crouch = true; }
+    else if (!on && this.crouch) { this.y -= d; this.h = STAND_H; this.crouch = false; }
+  }
+  canStand(arena) { return !arena.rectSolid(this.x, this.y - (STAND_H - CROUCH_H), this.w, STAND_H); }
+  moveX(arena, dx) {
+    if (!dx) return;
+    this.x += dx;
+    if (this.x < 0) { this.x = 0; this.kbx = 0; }
+    if (this.x + this.w > W) { this.x = W - this.w; this.kbx = 0; }
+    if (arena.rectSolid(this.x, this.y, this.w, this.h)) {
+      if (dx > 0) this.x = Math.floor((this.x + this.w - 0.001) / T) * T - this.w;
+      else this.x = (Math.floor(this.x / T) + 1) * T;
+      this.vx = 0; this.kbx = 0;
+    }
+  }
+  moveY(arena, dy) {
+    const oldFeet = this.y + this.h;
+    this.y += dy;
+    this.onGround = false;
+    if (this.y < 0) { this.y = 0; this.vy = Math.max(this.vy, 0); }
+    if (dy > 0) {
+      let top = null;
+      if (arena.rectSolid(this.x, this.y, this.w, this.h)) top = Math.floor((this.y + this.h - 0.001) / T) * T;
+      else if (this.dropT <= 0) top = arena.landingTop(this.x, this.w, oldFeet, this.y + this.h);
+      if (top !== null) { this.y = top - this.h; this.vy = 0; this.onGround = true; this.flaps = 1; this.coyote = 0.08; }
+    } else if (dy < 0 && arena.rectSolid(this.x, this.y, this.w, this.h)) {
+      this.y = (Math.floor(this.y / T) + 1) * T; this.vy = 0;
+    }
+  }
+  update(game, dt) {
+    const inp = this.ctrl.get(game, dt);
+    if (!this.alive) return;
+    const arena = game.arena;
+    this.cd -= dt; this.hurtT -= dt; this.barT -= dt; this.tagT -= dt; this.coyote -= dt; this.dropT -= dt;
+    const want = inp.crouch && this.onGround;
+    if (want && !this.crouch) this.setCrouch(true);
+    else if (!want && this.crouch && this.canStand(arena)) this.setCrouch(false);
+    const dirx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    if (dirx && this.chargeT <= 0) this.facing = dirx;
+    const target = dirx * (this.crouch ? CROUCH_SPEED : MOVE_SPEED);
+    this.vx += (target - this.vx) * Math.min(1, (this.onGround ? 16 : 9) * dt);
+    if (inp.jump_p) {
+      if (this.onGround || this.coyote > 0) {
+        if (this.crouch && arena.onPlank(this)) { this.dropT = 0.22; this.y += 2; this.onGround = false; this.coyote = 0; }
+        else {
+          if (this.crouch && this.canStand(arena)) this.setCrouch(false);
+          if (!this.crouch) { this.vy = -JUMP_V; this.onGround = false; this.coyote = 0; game.sound("jump"); }
+        }
+      } else if (this.flaps > 0) {
+        this.vy = -FLAP_V; this.flaps--;
+        game.burst(this.cx, this.cy + 2, [hex(BREEDS[this.breed].body), WHITE], 3, 30, 60);
+        game.sound("flap");
+      }
+    }
+    this.vy += GRAVITY * dt;
+    if (inp.jump && this.vy > GLIDE_FALL) this.vy = GLIDE_FALL;
+    this.vy = Math.min(this.vy, MAX_FALL);
+    this.moveX(arena, (this.vx + this.kbx) * dt);
+    this.kbx *= Math.exp(-7 * dt);
+    this.moveY(arena, this.vy * dt);
+    this.anim += dt;
+    if (inp.pickup_p) this.pickup(game);
+    this.handleAttack(game, inp, dt);
+    if (this.y > H + 20) this.die(game);
+  }
+  pickup(game) {
+    const box = inflate(this.rect(), 8, 6);
+    const near = game.items.filter(it => overlap(box, it.rect()));
+    if (near.length) {
+      near.sort((a, b) => Math.abs(a.cx - this.cx) - Math.abs(b.cx - this.cx));
+      const it = near[0];
+      if (this.weapon) this.dropWeapon(game);
+      game.items.splice(game.items.indexOf(it), 1);
+      this.weapon = it.key; this.ammo = it.ammo; this.cd = 0.15; this.chargeT = 0;
+      this.tag = WEAPONS[it.key].name; this.tagIdx = WK.indexOf(it.key); this.tagT = 1.4;
+      game.sound("pickup");
+    } else if (this.weapon) this.dropWeapon(game);
+  }
+  dropWeapon(game) {
+    const it = new Item(this.weapon, this.ammo, this.cx - 5, this.y - 2, false);
+    it.vy = -100; it.vx = this.facing * 50;
+    game.items.push(it);
+    this.weapon = null; this.chargeT = 0;
+  }
+  useAmmo(game) {
+    if (this.weapon && WEAPONS[this.weapon].ammo) {
+      this.ammo--;
+      if (this.ammo <= 0) {
+        const [gx, gy] = this.grip();
+        game.burst(gx, gy, ["#c8c8c8", "#969696"], 6, 30);
+        game.sound("empty");
+        this.tag = "Out of ammo"; this.tagIdx = -2; this.tagT = 1.0;
+        this.weapon = null;
+      }
+    }
+  }
+  handleAttack(game, inp, dt) {
+    const wd = this.weapon ? WEAPONS[this.weapon] : UNARMED;
+    if (this.chargeT > 0) {
+      this.chargeT -= dt;
+      if (this.chargeT <= 0 && this.weapon) {
+        const [gx, gy] = this.grip();
+        game.fireBeam(this, gx, gy, this.facing, wd.dmg, wd.kb);
+        this.useAmmo(game);
+      }
+      return;
+    }
+    if (this.swingT > 0) {
+      this.swingT -= dt;
+      if (wd.kind !== "melee") this.swingT = 0;
+      else if (!this.swingHit) this.meleeCheck(game, wd);
+    }
+    if (this.cd > 0 || !inp.shoot) return;
+    this.cd = wd.cd;
+    if (wd.kind === "melee") { this.swingT = 0.16; this.swingHit = false; game.sound(wd.sound); this.meleeCheck(game, wd); }
+    else if (wd.kind === "beam") { this.chargeT = wd.charge; game.sound("charge"); }
+    else { this.fire(game, wd); this.useAmmo(game); }
+  }
+  meleeCheck(game, wd) {
+    const reach = wd.reach;
+    const hx = this.facing > 0 ? this.x - 1 : this.x + 1 - reach;
+    const box = { x: Math.trunc(hx), y: Math.trunc(this.y - 4), w: this.w + reach, h: this.h + 8 };
+    for (const ch of game.chickens) {
+      if (ch === this || !ch.alive) continue;
+      if (overlap(box, ch.rect()) && game.arena.lineClear(this.cx, this.cy, ch.cx, ch.cy)) {
+        ch.hurt(game, wd.dmg, this.facing * wd.kb, -110);
+        this.swingHit = true;
+        game.sound(this.weapon === "pan" ? "bonk" : "hit");
+      }
+    }
+  }
+  fire(game, wd) {
+    const [gx, my] = this.grip();
+    for (let i = 0; i < wd.pellets; i++) {
+      const a = rnd(-wd.spread, wd.spread), sp = wd.speed * (wd.pellets > 1 ? rnd(0.85, 1.1) : 1);
+      let vx = Math.cos(a) * sp * this.facing, vy = Math.sin(a) * sp, y = my;
+      if (wd.proj === "egg") { vy = -130; y = my - 2; }
+      game.projectiles.push(new Projectile(wd.proj, gx, y, vx, vy, this, wd));
+    }
+    this.kbx -= this.facing * (wd.recoil || 0);
+    const [tip] = this.muzzle();
+    game.burst(tip, my, ["#fff0a0", "#ffc85a"], 3, 40);
+    game.sound(wd.sound);
+  }
+  hurt(game, dmg, kbx, kby) {
+    if (!this.alive || (game.phase !== "fight" && game.phase !== "ending")) return;
+    this.hp -= dmg; this.hurtT = 0.25; this.barT = 1.6;
+    this.kbx += kbx; this.vy = Math.min(this.vy, kby);
+    const b = BREEDS[this.breed];
+    game.burst(this.cx, this.cy, [hex(b.body), hex(b.dark), WHITE], 6, 60, 80, 0.9);
+    game.sound("hit");
+    if (this.hp <= 0) this.die(game);
+  }
+  die(game) {
+    if (!this.alive) return;
+    this.alive = false; this.hp = 0;
+    const b = BREEDS[this.breed];
+    game.burst(this.cx, this.cy, [hex(b.body), hex(b.dark), hex(b.tail), WHITE, hex(COMB)], 40, 110, 70, 1.6);
+    game.shakeBy(5);
+    game.sound("death");
+  }
+  draw(ctx, game) {
+    if (!this.alive) return;
+    const legs = !this.onGround ? "air" : Math.abs(this.vx) > 12 ? (Math.floor(this.anim * 8) % 2 ? "walk1" : "walk0") : "idle";
+    const flash = this.hurtT > 0 && Math.floor(this.hurtT * 30) % 2 === 0;
+    const bx = Math.trunc(this.x) - 4, by = Math.trunc(this.y + this.h) - 19;
+    ctx.drawImage(chickenSprite(this.breed, this.hat, this.crouch, legs, this.facing, flash), bx, by);
+    const wd = this.weapon ? WEAPONS[this.weapon] : UNARMED;
+    if (this.weapon) {
+      const ws = weaponSprite(this.weapon, this.facing), bar = wd.bar || 0, [gx, gy] = this.grip(), push = this.swingT > 0 ? 2 : 0;
+      ctx.drawImage(ws, this.facing > 0 ? gx + push : gx - ws.width + 1 - push, gy - bar);
+    }
+    if (this.swingT > 0 && wd.kind === "melee") {
+      const prog = 1 - this.swingT / 0.16, rad = wd.reach * 0.75;
+      for (let i = 0; i < 7; i++) {
+        const a = (-70 + 140 * (i / 6) * prog) * Math.PI / 180;
+        ctx.fillStyle = i % 2 ? WHITE : "#d2dceb";
+        ctx.fillRect(Math.trunc(this.cx + this.facing * Math.cos(a) * rad), Math.trunc(this.cy + Math.sin(a) * rad), 1, 1);
+      }
+    }
+    if (this.chargeT > 0 && this.weapon) {
+      const [mx, my] = this.muzzle();
+      ctx.fillStyle = "#c88cff";
+      if (this.facing > 0) { for (let x = mx; x < W; x += 3) if (Math.random() < 0.6) ctx.fillRect(x, my, 1, 1); }
+      else { for (let x = mx; x > 0; x -= 3) if (Math.random() < 0.6) ctx.fillRect(x, my, 1, 1); }
+    }
+    if (this.barT > 0) {
+      const x0 = Math.trunc(this.cx) - 7;
+      ctx.fillStyle = "#3c1418"; ctx.fillRect(x0, by + 1, 14, 2);
+      ctx.fillStyle = hpColor(this.hp); ctx.fillRect(x0, by + 1, Math.max(0, Math.trunc(14 * this.hp / MAX_HP)), 2);
+    }
+    if (this.tagT > 0) game.label(this.tag, Math.trunc(this.cx), by, 5, WHITE, "center", "bottom");
+  }
+}
+
+/* ------------------------------------------------------------------ sound */
+const SOUNDS = {
+  jump: [[330, 620, 0.09, "square", 0.10]], flap: [[500, 760, 0.06, "triangle", 0.12]],
+  shoot: [[900, 300, 0.06, "square", 0.08]], pop: [[1200, 700, 0.03, "square", 0.05]],
+  blast: [[3500, 0, 0.16, "noise", 0.30]], launch: [[900, 0, 0.22, "noise", 0.28]],
+  throw: [[400, 260, 0.08, "triangle", 0.16]], fire: [[1500, 0, 0.14, "noise", 0.18], [500, 200, 0.06, "triangle", 0.12]],
+  charge: [[250, 1200, 0.42, "square", 0.05]], rail: [[1500, 180, 0.30, "triangle", 0.26]],
+  boom: [[380, 0, 0.5, "noise", 0.55]], swing: [[5000, 0, 0.07, "noise", 0.12]],
+  peck: [[700, 500, 0.04, "square", 0.07]], bonk: [[240, 220, 0.12, "triangle", 0.28]],
+  hit: [[220, 80, 0.12, "square", 0.10]], pickup: [[660, 660, 0.05, "square", 0.08], [990, 990, 0.07, "square", 0.08]],
+  empty: [[300, 150, 0.08, "square", 0.07]], death: [[700, 90, 0.45, "square", 0.10]],
+  go: [[520, 1040, 0.18, "square", 0.08]], select: [[800, 800, 0.04, "square", 0.05]],
+  win: [[523, 523, 0.1, "square", 0.08], [659, 659, 0.1, "square", 0.08], [784, 784, 0.1, "square", 0.08], [1046, 1046, 0.3, "square", 0.08]],
+};
+const Sfx = {
+  ctx: null, noise: null, muted: false,
+  ensure() {
+    if (typeof window === "undefined" || !(window.AudioContext || window.webkitAudioContext)) return;
+    try {
+      if (!this.ctx) {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const len = this.ctx.sampleRate, buf = this.ctx.createBuffer(1, len, len), d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        this.noise = buf;
+      }
+      if (this.ctx.state === "suspended") this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  play(name) {
+    const parts = SOUNDS[name];
+    if (!parts || !this.ctx || this.muted) return;
+    const c = this.ctx;
+    let t = c.currentTime;
+    for (const [f0, f1, dur, wave, vol] of parts) {
+      const g = c.createGain();
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      if (wave === "noise") {
+        const src = c.createBufferSource(), flt = c.createBiquadFilter();
+        src.buffer = this.noise; flt.type = "lowpass"; flt.frequency.value = f0;
+        src.connect(flt).connect(g).connect(c.destination);
+        src.start(t, Math.random() * 0.5, dur + 0.02);
+      } else {
+        const o = c.createOscillator();
+        o.type = wave; o.frequency.setValueAtTime(f0, t);
+        o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t + dur);
+        o.connect(g).connect(c.destination);
+        o.start(t); o.stop(t + dur + 0.02);
+      }
+      t += dur;
+    }
+  },
+};
+
+/* ------------------------------------------------------------------ game */
+class Game {
+  constructor() {
+    this.world = makeCanvas(W, H);
+    this.wctx = this.world.getContext("2d");
+    this.mode = "menu";          // menu | cpu | local | host | guest
+    this.state = "idle";         // idle | play | paused | over
+    this.arena = getArena(0);
+    this.chickens = [];
+    this.items = []; this.projectiles = []; this.particles = []; this.beams = []; this.rings = [];
+    this.scores = [0, 0]; this.roundNo = 0; this.mapBag = []; this.lastMap = null;
+    this.phase = "countdown"; this.phaseT = 0; this.bannerT = 0; this.roundWinner = null;
+    this.spawnT = 0; this.shake = 0; this.t = 0; this.labels = [];
+    this.events = []; this.eventId = 0; this.net = null; this.onMatchOver = null;
+    this.guestSnapT = 0; this.guestProj = []; this.lastEvent = -1;
+  }
+  // ---- effects (recorded for the online guest when hosting) ----
+  record(ev) {
+    if (this.mode !== "host") return;
+    this.events.push([++this.eventId, ...ev]);
+    if (this.events.length > 40) this.events.splice(0, this.events.length - 40);
+  }
+  sound(name) { Sfx.play(name); this.record(["s", name]); }
+  shakeBy(n) { this.shake = Math.max(this.shake, n); this.record(["k", n]); }
+  addParticle(x, y, vx, vy, life, color, grav = 0, drag = 2) { this.particles.push([x, y, vx, vy, life, color, grav, drag]); }
+  burst(x, y, colors, n, speed, grav = 0, life = 0.5, record = true) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = rnd(0.3, 1) * speed;
+      this.addParticle(x, y, Math.cos(a) * v, Math.sin(a) * v - speed * 0.3, rnd(0.5, 1) * life, rchoice(colors), grav);
+    }
+    if (record) this.record(["b", Math.round(x), Math.round(y), colors, n, speed, grav, life]);
+  }
+  explode(x, y, radius, dmg, kb, owner) {
+    this.sound("boom"); this.shakeBy(6);
+    for (const ch of this.chickens) {
+      if (!ch.alive) continue;
+      const d = Math.hypot(ch.cx - x, ch.cy - y);
+      if (d < radius + 4) {
+        let f = 1 - Math.min(d / (radius + 4), 1) * 0.6;
+        if (ch === owner) f *= 0.5;
+        const a = Math.atan2(ch.cy - y, ch.cx - x);
+        ch.hurt(this, dmg * f, Math.cos(a) * kb, Math.min(-90, Math.sin(a) * kb));
+      }
+    }
+    this.boomFx(x, y, radius);
+    this.record(["x", Math.round(x), Math.round(y), radius]);
+  }
+  boomFx(x, y, radius) {
+    this.burst(x, y, ["#fff096", "#ffb43c", "#f06428"], 30, 120, 0, 0.6, false);
+    this.burst(x, y, ["#827878", "#aaa0a0"], 12, 40, -20, 1.0, false);
+    this.rings.push([x, y, 2, radius, 0.25]);
+  }
+  fireBeam(owner, x, y, d, dmg, kb) {
+    const end = d > 0 ? W : 0;
+    for (const ch of this.chickens) {
+      if (ch === owner || !ch.alive) continue;
+      const ahead = d > 0 ? ch.x + ch.w >= x : ch.x <= x;
+      if (ahead && ch.y - 1 <= y && y <= ch.y + ch.h + 1) ch.hurt(this, dmg, d * kb, -120);
+    }
+    this.beamFx(x, end, y);
+    this.record(["m", Math.round(x), end, y]);
+    this.sound("rail");
+  }
+  beamFx(x, end, y) {
+    this.beams.push([x, end, y, 0.25]);
+    for (let i = 0; i < 14; i++) this.addParticle(rnd(Math.min(x, end), Math.max(x, end)), y, rnd(-20, 20), rnd(-30, 30), 0.35, rchoice(["#c88cff", "#78f0ff"]));
+    this.shake = Math.max(this.shake, 3);
+  }
+  // ---- match flow ----
+  startMatch(mode, picks, opts = {}) {
+    this.mode = mode;
+    const c1 = new HumanController(mode === "local" ? KEYS_P1 : KEYS_ANY);
+    let c2, label2 = "P2";
+    if (mode === "cpu") { c2 = new CPUController(DIFF_NAMES[opts.difficulty ?? 1]); label2 = "CPU"; }
+    else if (mode === "host") c2 = new NetController();
+    else c2 = new HumanController(KEYS_P2);
+    this.chickens = [new Chicken(0, picks[0][0], picks[0][1], c1, mode === "host" ? "You" : "P1"),
+                     new Chicken(1, picks[1][0], picks[1][1], c2, mode === "host" ? "Rival" : label2)];
+    this.scores = [0, 0]; this.roundNo = 0; this.mapBag = []; this.lastMap = null;
+    this.state = "play";
+    this.nextRound();
+  }
+  pickMap() {
+    if (!this.mapBag.length) {
+      const bag = MAPS.map((_, i) => i);
+      for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+      if (bag.length > 1 && bag[0] === this.lastMap) [bag[0], bag[1]] = [bag[1], bag[0]];
+      this.mapBag = bag;
+    }
+    this.lastMap = this.mapBag.shift();
+    return this.lastMap;
+  }
+  nextRound() {
+    this.roundNo++;
+    this.arena = getArena(this.pickMap());
+    this.chickens.forEach((ch, i) => ch.spawn(...this.arena.spawns[i]));
+    this.items = []; this.projectiles = []; this.particles = []; this.beams = []; this.rings = [];
+    this.spawnItem(); this.spawnItem();
+    this.spawnT = rnd(3, 5);
+    this.phase = "countdown"; this.phaseT = 2.3; this.roundWinner = null;
+  }
+  spawnItem() { const k = randomWeapon(); this.items.push(new Item(k, WEAPONS[k].ammo || 0, rnd(10, W - 22), -12, true)); }
+  step(dt) {
+    this.t += dt;
+    this.shake = Math.max(0, this.shake - dt * 20);
+    if (this.state !== "play" || this.mode === "guest") return;
+    this.bannerT -= dt;
+    if (this.phase === "countdown") {
+      this.phaseT -= dt;
+      for (const it of this.items) it.update(this, dt);
+      if (this.phaseT <= 0) { this.phase = "fight"; this.bannerT = 0.7; this.sound("go"); }
+      return;
+    }
+    for (const ch of this.chickens) ch.update(this, dt);
+    for (const it of this.items) it.update(this, dt);
+    this.items = this.items.filter(it => it.life > 0);
+    for (const p of this.projectiles) if (p.alive) { p.update(this, dt); if (p.alive) projectileTrail(this, p.kind, p.x, p.y, p.vx); }
+    this.projectiles = this.projectiles.filter(p => p.alive);
+    if (this.phase === "fight") {
+      this.spawnT -= dt;
+      if (this.spawnT <= 0) { this.spawnT = rnd(3.5, 6); if (this.items.length < 4) this.spawnItem(); }
+      if (this.chickens.filter(c => c.alive).length <= 1) { this.phase = "ending"; this.phaseT = 0.6; }
+    } else if (this.phase === "ending") {
+      this.phaseT -= dt;
+      if (this.phaseT <= 0) {
+        const alive = this.chickens.filter(c => c.alive);
+        this.roundWinner = alive.length === 1 ? alive[0].idx : null;
+        if (this.roundWinner !== null) this.scores[this.roundWinner]++;
+        this.phase = "roundover"; this.phaseT = 2.6;
+        this.sound(Math.max(...this.scores) >= WIN_SCORE ? "win" : "pickup");
+      }
+    } else if (this.phase === "roundover") {
+      this.phaseT -= dt;
+      if (this.phaseT <= 0) {
+        if (Math.max(...this.scores) >= WIN_SCORE) { this.state = "over"; if (this.onMatchOver) this.onMatchOver(); }
+        else this.nextRound();
+      }
+    }
+  }
+  stepFx(dt) {
+    for (const b of this.beams) b[3] -= dt;
+    this.beams = this.beams.filter(b => b[3] > 0);
+    for (const r of this.rings) { r[2] += (r[3] - r[2]) * Math.min(1, dt * 18); r[4] -= dt; }
+    this.rings = this.rings.filter(r => r[4] > 0);
+    for (const q of this.particles) {
+      q[0] += q[2] * dt; q[1] += q[3] * dt; q[3] += q[6] * dt;
+      const d = Math.exp(-q[7] * dt); q[2] *= d; q[3] *= d; q[4] -= dt;
+    }
+    this.particles = this.particles.filter(q => q[4] > 0);
+    if (this.particles.length > 600) this.particles.splice(0, this.particles.length - 600);
+  }
+
+  // ---- online: host snapshot / guest apply ----
+  snapshot() {
+    const r1 = v => Math.round(v * 10);
+    const ph = { countdown: "c", fight: "f", ending: "e", roundover: "r" }[this.phase];
+    const snap = {
+      st: this.state === "over" ? "o" : "p", ph, pt: Math.round(this.phaseT * 10), bt: this.bannerT > 0 ? 1 : 0,
+      rn: this.roundNo, m: this.arena.idx, sc: this.scores.slice(), rw: this.roundWinner ?? -1,
+      c: this.chickens.map(ch => [r1(ch.x), r1(ch.y), ch.facing,
+        (ch.crouch ? 1 : 0) | (ch.onGround ? 2 : 0) | (ch.alive ? 4 : 0) | (ch.hurtT > 0 ? 8 : 0) | (ch.barT > 0 ? 16 : 0) |
+        (Math.abs(ch.vx) > 12 ? 32 : 0) | (ch.chargeT > 0 ? 64 : 0) | (ch.tagT > 0 ? 128 : 0),
+        Math.max(0, Math.ceil(ch.hp)), ch.weapon ? WK.indexOf(ch.weapon) : -1, ch.ammo, ch.tagIdx,
+        Math.max(0, Math.round(ch.swingT * 100)), ch.breed, ch.hat]),
+      i: this.items.map(it => [WK.indexOf(it.key), r1(it.x), r1(it.y), it.para && !it.landed ? 1 : 0, Math.round(it.life * 10)]),
+      p: this.projectiles.slice(0, 48).map(p => [PK.indexOf(p.kind), Math.round(p.x), Math.round(p.y), Math.round(p.vx), Math.round(p.vy),
+        p.kind === "egg" && p.life < 0.4 ? 1 : 0]),
+      e: this.events.slice(-16),
+    };
+    // stay inside the presence size budget
+    while (JSON.stringify(snap).length > 3300 && (snap.e.length > 4 || snap.p.length > 8)) {
+      if (snap.p.length > 8) snap.p.pop(); else snap.e.shift();
+    }
+    return snap;
+  }
+  applySnapshot(s) {
+    if (!s || !s.c) return;
+    this.arena = getArena(s.m | 0);
+    this.state = s.st === "o" ? "over" : "play";
+    this.phase = { c: "countdown", f: "fight", e: "ending", r: "roundover" }[s.ph] || "fight";
+    this.phaseT = (s.pt | 0) / 10; this.bannerT = s.bt ? 0.1 : 0;
+    this.roundNo = s.rn | 0; this.scores = s.sc; this.roundWinner = s.rw >= 0 ? s.rw : null;
+    s.c.forEach((d, i) => {
+      let ch = this.chickens[i];
+      if (!ch) ch = this.chickens[i] = new Chicken(i, d[9], d[10], null, i === 1 ? "You" : "Rival");
+      const [x, y, facing, fl, hp, widx, ammo, tagIdx, swing, breed, hat] = d;
+      ch.breed = breed; ch.hat = hat;
+      ch.tx = x / 10; ch.ty = y / 10;
+      if (ch.x === undefined || Math.abs(ch.tx - ch.x) > 24 || Math.abs(ch.ty - ch.y) > 24 || !ch.alive) { ch.x = ch.tx; ch.y = ch.ty; }
+      ch.facing = facing;
+      ch.crouch = !!(fl & 1); ch.h = ch.crouch ? CROUCH_H : STAND_H;
+      ch.onGround = !!(fl & 2); ch.alive = !!(fl & 4);
+      if (fl & 8 && ch.hurtT <= 0) ch.hurtT = 0.25;
+      ch.barT = fl & 16 ? 0.2 : 0; ch.vx = fl & 32 ? 20 : 0; ch.chargeT = fl & 64 ? 0.1 : 0;
+      ch.tagT = fl & 128 ? 0.2 : 0; ch.tagIdx = tagIdx;
+      ch.tag = tagIdx >= 0 ? WEAPONS[WK[tagIdx]].name : tagIdx === -2 ? "Out of ammo" : "";
+      ch.hp = hp; ch.weapon = widx >= 0 ? WK[widx] : null; ch.ammo = ammo; ch.swingT = swing / 100;
+    });
+    this.items = s.i.map(d => { const it = new Item(WK[d[0]], 0, d[1] / 10, d[2] / 10, !!d[3]); it.life = d[4] / 10; return it; });
+    this.guestProj = s.p.map(d => ({ kind: PK[d[0]], x: d[1], y: d[2], vx: d[3], vy: d[4], blink: d[5] }));
+    this.guestSnapT = 0;
+    const evs = s.e || [];
+    if (this.lastEvent < 0) this.lastEvent = evs.length ? evs[evs.length - 1][0] : 0;
+    for (const ev of evs) {
+      if (ev[0] <= this.lastEvent) continue;
+      this.lastEvent = ev[0];
+      const [, type, a, b, c, d, e, f, g] = ev;
+      if (type === "s") Sfx.play(a);
+      else if (type === "k") this.shake = Math.max(this.shake, a);
+      else if (type === "b") this.burst(a, b, c, d, e, f, g, false);
+      else if (type === "x") this.boomFx(a, b, c);
+      else if (type === "m") this.beamFx(a, b, c);
+    }
+  }
+  guestStep(dt) {
+    this.t += dt;
+    this.shake = Math.max(0, this.shake - dt * 20);
+    this.guestSnapT += dt;
+    for (const ch of this.chickens) {
+      if (ch.tx === undefined) continue;
+      const k = Math.min(1, dt * 18);
+      ch.x += (ch.tx - ch.x) * k; ch.y += (ch.ty - ch.y) * k;
+      ch.hurtT -= dt; ch.anim += dt;
+    }
+    for (const p of this.guestProj) if (Math.random() < 0.5) projectileTrail(this, p.kind, p.x, p.y, p.vx);
+  }
+
+  // ---- drawing ----
+  label(text, x, y, size, color, align = "left", base = "top") { this.labels.push([text, x, y, size, color, align, base]); }
+  render(main, scale, dt) {
+    const w = this.wctx;
+    this.labels = [];
+    this.arena.drawSky(w, dt);
+    w.drawImage(this.arena.tiles, 0, 0);
+    const inGame = this.state !== "idle";
+    if (inGame) {
+      for (const it of this.items) it.draw(w, this);
+      for (const ch of this.chickens) ch.draw(w, this);
+      if (this.mode === "guest") {
+        const lag = Math.min(this.guestSnapT, 0.06);
+        for (const p of this.guestProj) drawProjectile(w, p.kind, p.x + p.vx * lag, p.y + p.vy * lag, p.vx, p.blink);
+      } else for (const p of this.projectiles) drawProjectile(w, p.kind, p.x, p.y, p.vx, p.kind === "egg" && p.life < 0.4 && Math.floor(p.life * 20) % 2);
+      for (const [x0, x1, y, life] of this.beams) {
+        const lo = Math.trunc(Math.min(x0, x1)), hi = Math.trunc(Math.max(x0, x1));
+        w.fillStyle = "#a064ff"; w.fillRect(lo, y - 1, hi - lo, life / 0.25 > 0.5 ? 3 : 1);
+        w.fillStyle = "#f0faff"; w.fillRect(lo, y, hi - lo, 1);
+      }
+      for (const [x, y, r, , life] of this.rings) pixRing(w, Math.trunc(x), Math.trunc(y), Math.trunc(r), life > 0.12 ? "#ffe6a0" : "#ffa050");
+      for (const q of this.particles) if (q[0] >= 0 && q[0] < W && q[1] >= 0 && q[1] < H) { w.fillStyle = q[5]; w.fillRect(Math.trunc(q[0]), Math.trunc(q[1]), 1, 1); }
+      if (this.phase === "countdown") for (const ch of this.chickens) this.label(ch.label, Math.trunc(ch.cx), Math.trunc(ch.y) - 9, 6, P_COLORS[ch.idx], "center", "bottom");
+    }
+    // compose onto the visible canvas
+    const s = scale;
+    let ox = 0, oy = 0;
+    if (this.shake > 0 && !REDUCE_MOTION) { const k = Math.trunc(this.shake); ox = rint(-k, k); oy = rint(-k, k); }
+    main.imageSmoothingEnabled = false;
+    main.fillStyle = hex(this.arena.sky.top); main.fillRect(0, 0, W * s, H * s);
+    main.drawImage(this.world, ox * s, oy * s, W * s, H * s);
+    for (const l of this.labels) drawLabel(main, s, ...l);
+    if (inGame) { this.renderHud(main, s); if (this.state === "play") this.renderBanners(main, s); }
+  }
+  renderHud(m, s) {
+    m.fillStyle = "rgba(20,14,20,.5)"; m.fillRect(0, (H - 16) * s, W * s, 16 * s);
+    const y = H - 12;
+    for (const ch of this.chickens) {
+      const x = ch.idx === 0 ? 6 : W / 2 + 6;
+      drawLabel(m, s, ch.label, x, y - 1, 6, P_COLORS[ch.idx], "left", "top", 26);
+      const bx = x + 29;
+      m.fillStyle = "#3c1418"; m.fillRect(bx * s, (y + 1) * s, 40 * s, 4 * s);
+      m.fillStyle = hpColor(ch.hp); m.fillRect(bx * s, (y + 1) * s, Math.max(0, Math.trunc(40 * ch.hp / MAX_HP)) * s, 4 * s);
+      let txt = "Peck";
+      if (ch.weapon) { const wd = WEAPONS[ch.weapon]; txt = wd.name + (wd.ammo ? " " + ch.ammo : ""); }
+      drawLabel(m, s, txt, bx + 44, y - 1, 5, "#e6e0f4", "left", "top", 74);
+      for (let i = 0; i < WIN_SCORE; i++) {
+        const ex = x + 152 + i * 6;
+        m.fillStyle = i < this.scores[ch.idx] ? WHITE : "#5a5060";
+        m.fillRect(ex * s, y * s, 4 * s, 5 * s); m.fillRect((ex + 1) * s, (y - 1) * s, 2 * s, 7 * s);
+      }
+    }
+  }
+  renderBanners(m, s) {
+    const cx = W / 2;
+    if (this.phase === "countdown") {
+      drawLabel(m, s, `Round ${this.roundNo}`, cx, 68, 8, WHITE, "center", "middle");
+      drawLabel(m, s, this.arena.name, cx, 86, 12, YELLOW, "center", "middle");
+      const n = Math.ceil(this.phaseT / 0.75);
+      if (n >= 1 && n <= 3) drawLabel(m, s, String(n), cx, 116, 18, WHITE, "center", "middle");
+    } else if (this.bannerT > 0) drawLabel(m, s, "Fight!", cx, 100, 20, YELLOW, "center", "middle");
+    if (this.phase === "roundover") {
+      const msg = this.roundWinner === null ? "Nobody survived the round!" : `${this.chickens[this.roundWinner].label} ${this.chickens[this.roundWinner].label === "You" ? "win" : "wins"} the round!`;
+      drawLabel(m, s, msg, cx, 92, 11, YELLOW, "center", "middle", W - 24);
+      drawLabel(m, s, `${this.scores[0]}  -  ${this.scores[1]}`, cx, 112, 11, WHITE, "center", "middle");
+    }
+  }
+}
+const REDUCE_MOTION = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+function drawLabel(m, s, text, x, y, size, color, align = "left", base = "top", maxW = W - 12) {
+  m.font = `${Math.round(size * s * 1.25)}px Silkscreen, ui-monospace, monospace`;
+  m.textAlign = align; m.textBaseline = base;
+  const mw = maxW * s, off = Math.max(1, s * 0.6);
+  m.fillStyle = INK; m.fillText(text, x * s + off, y * s + off, mw);
+  m.fillStyle = color; m.fillText(text, x * s, y * s, mw);
+}
+
+/* ------------------------------------------------------------------ online */
+class Net {
+  constructor(app) { this.app = app; this.room = null; this.lobby = null; this.code = null; this.role = null; this.guestPeer = null; this.hostPeer = null; this.lastSnap = null; this.unsubs = []; }
+  async init() {
+    if (this.room !== null) return this.room;
+    try { this.room = (typeof claude !== "undefined" && claude.use) ? await claude.use("room") : null; } catch (e) { this.room = null; }
+    if (this.room) {
+      this.room.onPeers(() => this.app.onLobbyChange(), () => {});
+    }
+    return this.room;
+  }
+  openGames() {
+    if (!this.room) return [];
+    return this.room.peers().filter(p => !p.isMe && p.presence && typeof p.presence.open === "string" && /^[A-Z]{4}$/.test(p.presence.open)).map(p => p.presence.open);
+  }
+  async host() {
+    const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    this.code = Array.from({ length: 4 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
+    this.role = "host";
+    this.sub = await this.room.join("cluck-" + this.code.toLowerCase());
+    this.listen();
+    this.room.presence({ open: this.code }).catch(() => {});
+    this.sub.presence({ role: "host", picks: this.app.picks[0], ready: false, scr: "wait", guest: null }).catch(() => {});
+  }
+  async join(code) {
+    this.code = code; this.role = "guest";
+    this.sub = await this.room.join("cluck-" + code.toLowerCase());
+    this.listen();
+    this.sub.presence({ role: "guest", picks: this.app.picks[1], ready: false, inp: { b: 0, j: 0, s: 0, p: 0 } }).catch(() => {});
+  }
+  listen() {
+    this.unsubs.push(this.sub.onPeers(ch => this.onPeers(ch), () => this.app.netLost("The connection to the game was lost.")));
+  }
+  me() { return this.sub ? this.sub.peers().find(p => p.sameTab) : null; }
+  other() {
+    if (!this.sub) return null;
+    const ps = this.sub.peers().filter(p => !p.sameTab);
+    if (this.role === "host") return ps.find(p => p.peer === this.guestPeer) || null;
+    return ps.find(p => p.presence && p.presence.role === "host") || null;
+  }
+  onPeers(change) {
+    if (this.role === "host") {
+      if (!this.guestPeer) {
+        const g = change.peers.find(p => !p.sameTab && p.presence && p.presence.role === "guest");
+        if (g) {
+          this.guestPeer = g.peer;
+          this.sub.presence({ guest: g.peer }).catch(() => {});
+          this.room.presence({ open: null }).catch(() => {});
+          this.app.onOpponentJoined();
+        }
+      } else if (change.left.some(p => p.peer === this.guestPeer)) {
+        this.app.netLost("Your opponent left the game.");
+        return;
+      }
+    } else {
+      const h = change.peers.find(p => !p.sameTab && p.presence && p.presence.role === "host");
+      if (h) {
+        this.hostPeer = h.peer;
+        const myPeer = this.me() && this.me().peer;
+        if (h.presence.guest && myPeer && h.presence.guest !== myPeer) { this.app.netLost("That game already has two players."); return; }
+        if (h.presence.snap && h.presence.snap !== this.lastSnap) { this.lastSnap = h.presence.snap; this.app.onHostSnapshot(h.presence.snap); }
+      } else if (this.hostPeer && change.left.some(p => p.peer === this.hostPeer)) {
+        this.app.netLost("The host left the game."); return;
+      }
+    }
+    this.app.onNetState();
+  }
+  guestInput() { const g = this.other(); return g && g.presence && g.presence.inp; }
+  setPresence(patch) { if (this.sub) this.sub.presence(patch).catch(() => {}); }
+  async leave() {
+    for (const u of this.unsubs) u();
+    this.unsubs = [];
+    if (this.room) this.room.presence({ open: null }).catch(() => {});
+    if (this.sub) { try { await this.sub.leave(); } catch (e) {} }
+    this.sub = null; this.role = null; this.guestPeer = null; this.hostPeer = null; this.lastSnap = null; this.code = null;
+  }
+}
+
+/* ------------------------------------------------------------------ online outside claude.ai (PeerJS) */
+// Hosted anywhere else, the two browsers connect directly (WebRTC). PeerJS's free public
+// server only introduces them; game data then flows player to player.
+const PEER_PREFIX = "cluckclash-";
+class PeerNet {
+  constructor(app) {
+    this.app = app; this.kind = "peer"; this.room = null; this.peer = null; this.conn = null;
+    this.role = null; this.code = null; this.guestPeer = null; this.hostPeer = null;
+    this.local = {}; this.remote = null; this.lastSnap = null; this.lastSend = 0; this.sendT = null; this.beat = null; this.lastHeard = 0;
+  }
+  async init() { this.room = typeof Peer !== "undefined" ? true : null; return this.room; }
+  openGames() { return []; }
+  makePeer(id) {
+    return new Promise((resolve, reject) => {
+      let p;
+      try { p = id ? new Peer(id, { debug: 0 }) : new Peer({ debug: 0 }); } catch (e) { reject(e); return; }
+      const done = () => { clearTimeout(timer); if (p.removeListener) { p.removeListener("open", onOpen); p.removeListener("error", onErr); } };
+      const onOpen = () => { done(); resolve(p); };
+      const onErr = e => { done(); try { p.destroy(); } catch (x) {} reject(e); };
+      const timer = setTimeout(() => onErr({ type: "timeout" }), 12000);
+      p.on("open", onOpen); p.on("error", onErr);
+    });
+  }
+  async host() {
+    const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let lastErr = null;
+    for (let tries = 0; tries < 4 && !this.peer; tries++) {
+      const code = Array.from({ length: 4 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
+      try { this.peer = await this.makePeer(PEER_PREFIX + code); this.code = code; }
+      catch (e) { lastErr = e; if (!e || e.type !== "unavailable-id") break; }
+    }
+    if (!this.peer) throw lastErr || new Error("no peer");
+    this.role = "host";
+    this.local = { role: "host", picks: this.app.picks[0], ready: false, scr: "wait", guest: null };
+    this.peer.on("connection", conn => this.accept(conn));
+    this.peer.on("disconnected", () => { try { if (this.role && this.peer) this.peer.reconnect(); } catch (e) {} });
+    this.peer.on("error", () => {});
+  }
+  accept(conn) {
+    if (this.conn) {
+      conn.on("open", () => { try { conn.send({ full: 1 }); } catch (e) {} setTimeout(() => { try { conn.close(); } catch (e) {} }, 800); });
+      return;
+    }
+    this.conn = conn; this.guestPeer = conn.peer;
+    conn.on("open", () => { this.local.guest = conn.peer; this.startBeat(); this.flush(); this.app.onOpponentJoined(); });
+    this.wire(conn, "Your opponent left the game.");
+  }
+  async join(code) {
+    this.code = code; this.role = "guest";
+    this.peer = await this.makePeer();
+    this.local = { role: "guest", picks: this.app.picks[1], ready: false, inp: { b: 0, j: 0, s: 0, p: 0 } };
+    this.peer.on("error", e => { if (this.role && e && e.type === "peer-unavailable") this.app.netLost(`No game with the code ${code} was found.`); });
+    this.peer.on("disconnected", () => { try { if (this.role && this.peer) this.peer.reconnect(); } catch (e) {} });
+    const conn = this.peer.connect(PEER_PREFIX + code, { reliable: false, serialization: "json" });
+    this.conn = conn;
+    conn.on("open", () => { this.startBeat(); this.flush(); });
+    this.wire(conn, "The host left the game.");
+  }
+  wire(conn, goneMsg) {
+    conn.on("data", d => this.onData(d));
+    conn.on("close", () => { if (this.role) this.app.netLost(goneMsg); });
+    conn.on("error", () => {});
+  }
+  startBeat() {
+    clearInterval(this.beat);
+    this.lastHeard = Date.now();
+    this.beat = setInterval(() => {
+      if (this.role && Date.now() - this.lastHeard > 8000) {
+        this.app.netLost(this.role === "host" ? "Your opponent’s connection dropped." : "The connection to the host dropped.");
+        return;
+      }
+      this.flush();
+    }, 500);
+  }
+  onData(d) {
+    if (!d || typeof d !== "object") return;
+    this.lastHeard = Date.now();
+    if (d.full) { this.app.netLost("That game already has two players."); return; }
+    if (!d.p || typeof d.p !== "object") return;
+    this.remote = d.p;
+    if (this.role === "guest") {
+      this.hostPeer = this.conn && this.conn.peer;
+      if (d.p.snap && d.p.snap !== this.lastSnap) { this.lastSnap = d.p.snap; this.app.onHostSnapshot(d.p.snap); }
+    }
+    this.app.onNetState();
+  }
+  me() { return this.peer ? { peer: this.peer.id } : null; }
+  other() { return this.conn && this.remote ? { peer: this.conn.peer, presence: this.remote } : null; }
+  guestInput() { return this.remote && this.remote.inp; }
+  setPresence(patch) {
+    for (const k in patch) { if (patch[k] === null) delete this.local[k]; else this.local[k] = patch[k]; }
+    this.flush();
+  }
+  flush() {
+    if (!this.conn || !this.conn.open) return;
+    const now = Date.now(), wait = 33 - (now - this.lastSend);
+    if (wait > 0) { if (!this.sendT) this.sendT = setTimeout(() => { this.sendT = null; this.flush(); }, wait); return; }
+    this.lastSend = now;
+    try { this.conn.send({ p: this.local }); } catch (e) {}
+  }
+  async leave() {
+    const conn = this.conn, peer = this.peer;
+    this.role = null;
+    clearInterval(this.beat); clearTimeout(this.sendT); this.sendT = null;
+    this.conn = null; this.peer = null; this.remote = null; this.guestPeer = null; this.hostPeer = null; this.lastSnap = null; this.code = null;
+    try { if (conn) conn.close(); } catch (e) {}
+    setTimeout(() => { try { if (peer) peer.destroy(); } catch (e) {} }, 300);
+  }
+}
+
+/* ------------------------------------------------------------------ app / UI */
+const App = {
+  game: null, net: null, screen: "title", difficulty: 1, picks: [[0, 1], [1, 4]], ready: [false, false],
+  modeSel: "cpu", scale: 2, guestInp: { b: 0, j: 0, s: 0, p: 0 }, sentInp: "",
+  init() {
+    this.game = new Game();
+    this.net = new Net(this);
+    this.game.net = this.net;
+    this.game.onMatchOver = () => this.showOver();
+    try {
+      const saved = JSON.parse(localStorage.getItem("cluck-clash") || "null");
+      if (saved && Array.isArray(saved.picks)) { this.picks = saved.picks; this.difficulty = saved.difficulty ?? 1; }
+    } catch (e) {}
+    this.canvas = document.getElementById("screen");
+    this.ctx = this.canvas.getContext("2d");
+    this.stage = document.getElementById("stage");
+    document.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => this.act(b.dataset.act)));
+    document.querySelectorAll("[data-diff]").forEach(b => b.addEventListener("click", () => { this.difficulty = +b.dataset.diff; this.save(); this.syncDiff(); Sfx.ensure(); Sfx.play("select"); }));
+    this.syncDiff();
+    addEventListener("keydown", e => this.onKey(e));
+    addEventListener("keyup", e => keysDown.delete(e.code));
+    addEventListener("blur", () => { keysDown.clear(); if (this.game.state === "play" && this.game.mode !== "host" && this.game.mode !== "guest") this.pause(); });
+    this.stage.addEventListener("pointerdown", () => Sfx.ensure());
+    addEventListener("resize", () => this.fit());
+    document.addEventListener("fullscreenchange", () => this.syncFs());
+    document.addEventListener("webkitfullscreenchange", () => this.syncFs());
+    this.fit();
+    this.show("title");
+    // On claude.ai use its built-in live room; anywhere else fall back to PeerJS.
+    this.net.init().then(room => {
+      if (!room && typeof Peer !== "undefined") { this.net = new PeerNet(this); this.game.net = this.net; return this.net.init(); }
+    }).then(() => this.refreshOnline());
+    let last = performance.now(), acc = 0;
+    const frame = now => {
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      if (this.game.mode === "guest") { this.game.guestStep(dt); this.sendGuestInput(); }
+      else {
+        acc += dt;
+        while (acc >= STEP) { this.game.step(STEP); acc -= STEP; }
+        if (this.game.mode === "host" && this.game.state !== "idle") this.net.setPresence({ snap: this.game.snapshot(), scr: this.game.state === "over" ? "over" : "play" });
+      }
+      this.game.stepFx(dt);
+      this.game.render(this.ctx, this.scale, this.game.state === "paused" ? 0 : dt);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  },
+  save() { try { localStorage.setItem("cluck-clash", JSON.stringify({ picks: this.picks, difficulty: this.difficulty })); } catch (e) {} },
+  syncDiff() { document.querySelectorAll("[data-diff]").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.diff === this.difficulty))); },
+  fit() {
+    // Fill the window: use a whole-number scale when it is close to the best fit (crisper pixels), else the exact fit.
+    const box = document.getElementById("main");
+    const availW = box.clientWidth || innerWidth, availH = box.clientHeight || innerHeight;
+    const exact = Math.min(availW / W, availH / H), whole = Math.floor(exact);
+    let s = whole >= 1 && whole / exact >= 0.9 ? whole : exact;
+    s = Math.max(0.5, s);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.scale = s * dpr;
+    this.canvas.width = Math.round(W * this.scale); this.canvas.height = Math.round(H * this.scale);
+    this.stage.style.width = W * s + "px"; this.stage.style.height = H * s + "px";
+  },
+  show(name) {
+    this.screen = name;
+    for (const id of ["title", "custom", "online", "pause", "over", "msg", "help"]) document.getElementById("scr-" + id).hidden = id !== name;
+    const first = name && document.querySelector(`#scr-${name} button:not([disabled]), #scr-${name} input`);
+    if (first && name !== "custom") first.focus({ preventScroll: true });
+    if (!name) this.stage.focus({ preventScroll: true });
+  },
+  act(a) {
+    Sfx.ensure();
+    if (a === "cpu" || a === "local") { this.modeSel = a; this.ready = [false, a === "cpu"]; this.prepCustom(); }
+    else if (a === "online") { this.modeSel = "online"; this.show("online"); this.refreshOnline(); }
+    else if (a === "back") { if (this.net.role) this.net.leave(); this.toTitle(); }
+    else if (a === "resume") { this.game.state = "play"; this.show(null); }
+    else if (a === "quit") { this.quit(); }
+    else if (a === "help") { this.helpFrom = this.screen; this.show("help"); }
+    else if (a === "help-back") { this.show(this.helpFrom || "title"); }
+    else if (a === "fullscreen") { this.toggleFullscreen(); }
+  },
+  toggleFullscreen() {
+    const d = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+    const el = d.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) { this.fsBlocked(); return; }
+    try { const p = req.call(el); if (p && p.catch) p.catch(() => this.fsBlocked()); } catch (e) { this.fsBlocked(); }
+  },
+  fsBlocked() { document.querySelectorAll("[data-fs]").forEach(b => { b.textContent = "Press F11 for full screen"; }); },
+  syncFs() {
+    const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    document.querySelectorAll("[data-fs]").forEach(b => { b.textContent = on ? "Exit full screen" : "Full screen"; });
+    this.fit();
+  },
+  quit() {
+    if (this.net.role) this.net.leave();
+    this.game.state = "idle"; this.game.mode = "menu"; this.game.arena = getArena(0); this.game.chickens = [];
+    this.toTitle();
+  },
+  toTitle() { this.show("title"); },
+  prepCustom() {
+    if (this.modeSel === "cpu") {
+      const choices = BREEDS.map((_, i) => i).filter(i => i !== this.picks[0][0]);
+      this.picks[1] = [rchoice(choices), rint(1, HATS.length - 1)];
+    } else if (this.modeSel === "local" && this.picks[1][0] === this.picks[0][0]) this.cycleBreed(1, 1);
+    this.show("custom");
+    this.renderCustom();
+  },
+  // which picker index this screen controls locally
+  localSides() {
+    if (this.modeSel === "cpu") return [0];
+    if (this.modeSel === "local") return [0, 1];
+    return [this.net.role === "host" ? 0 : 1];
+  },
+  takenBreed(i) {
+    if (this.modeSel === "online") {
+      const o = this.net.other();
+      return o && o.presence && Array.isArray(o.presence.picks) ? o.presence.picks[0] : -1;
+    }
+    return this.picks[1 - i][0];
+  },
+  cycleBreed(i, d) {
+    const taken = this.takenBreed(i);
+    let b = this.picks[i][0];
+    for (let k = 0; k < BREEDS.length; k++) { b = (b + d + BREEDS.length) % BREEDS.length; if (b !== taken) break; }
+    this.picks[i][0] = b;
+  },
+  change(i, what, d) {
+    if (this.ready[i]) return;
+    if (what === "breed") this.cycleBreed(i, d); else this.picks[i][1] = (this.picks[i][1] + d + HATS.length) % HATS.length;
+    Sfx.play("select");
+    this.save();
+    if (this.modeSel === "online") this.net.setPresence({ picks: this.picks[i] });
+    this.renderCustom();
+  },
+  toggleReady(i) {
+    if (this.modeSel === "online") {
+      const t = this.takenBreed(i);
+      if (t === this.picks[i][0]) this.cycleBreed(i, 1);
+      this.ready[i] = !this.ready[i];
+      this.net.setPresence({ ready: this.ready[i], picks: this.picks[i] });
+    } else this.ready[i] = !this.ready[i];
+    Sfx.play("pickup");
+    this.renderCustom();
+    this.maybeStart();
+  },
+  maybeStart() {
+    if (this.modeSel === "online") {
+      if (this.net.role !== "host") return;
+      const o = this.net.other();
+      if (!(this.ready[0] && o && o.presence && o.presence.ready)) return;
+      const gp = o.presence.picks;
+      const guestPick = Array.isArray(gp) ? [clamp(gp[0] | 0, 0, BREEDS.length - 1), clamp(gp[1] | 0, 0, HATS.length - 1)] : [1, 0];
+      if (guestPick[0] === this.picks[0][0]) guestPick[0] = (guestPick[0] + 1) % BREEDS.length;
+      this.game.events = [];
+      this.game.startMatch("host", [this.picks[0], guestPick]);
+      this.ready = [false, false];
+      this.net.setPresence({ ready: false });
+      this.show(null);
+      return;
+    }
+    if (this.ready.every(Boolean)) {
+      this.game.startMatch(this.modeSel, this.picks.map(p => p.slice()), { difficulty: this.difficulty });
+      this.ready = [false, false];
+      this.show(null);
+    }
+  },
+  renderCustom() {
+    const local = this.localSides();
+    const online = this.modeSel === "online";
+    for (let i = 0; i < 2; i++) {
+      const el = document.getElementById("pick" + i);
+      let breed = this.picks[i][0], hat = this.picks[i][1], ready = this.ready[i];
+      let title = i === 0 ? "Player 1" : this.modeSel === "cpu" ? "Computer" : "Player 2";
+      const mine = local.includes(i);
+      if (online) {
+        title = mine ? "You" : "Your rival";
+        if (!mine) {
+          const o = this.net.other();
+          const pr = o && o.presence;
+          if (pr && Array.isArray(pr.picks)) { breed = clamp(pr.picks[0] | 0, 0, BREEDS.length - 1); hat = clamp(pr.picks[1] | 0, 0, HATS.length - 1); }
+          ready = !!(pr && pr.ready);
+        }
+      }
+      if (this.modeSel === "cpu" && i === 1) ready = true;
+      const keysHint = online ? "Arrows or W/S/A/D, then F" : i === 0 ? "W/S breed, A/D hat, F ready" : "Up/Down breed, Left/Right hat, / ready";
+      el.innerHTML = "";
+      const h = document.createElement("h3"); h.textContent = title; h.style.color = P_COLORS[i]; el.appendChild(h);
+      const cv = makeCanvas(CW * 4, CH * 4); cv.style.width = "96px"; cv.style.height = "120px"; cv.style.imageRendering = "pixelated";
+      const cx = cv.getContext("2d"); cx.imageSmoothingEnabled = false;
+      cx.drawImage(chickenSprite(breed, hat, false, "idle", i === 0 ? 1 : -1, false), 0, 0, CW * 4, CH * 4);
+      cv.setAttribute("role", "img"); cv.setAttribute("aria-label", `${BREEDS[breed].name} wearing ${HATS[hat].name.toLowerCase()}`);
+      el.appendChild(cv);
+      const mk = (what, label, val) => {
+        const row = document.createElement("div"); row.className = "choice";
+        const a = document.createElement("button"); a.textContent = "<"; a.setAttribute("aria-label", "Previous " + label);
+        const span = document.createElement("span"); span.textContent = val;
+        const b = document.createElement("button"); b.textContent = ">"; b.setAttribute("aria-label", "Next " + label);
+        const can = mine && !ready;
+        a.disabled = b.disabled = !can;
+        a.onclick = () => this.change(i, what, -1); b.onclick = () => this.change(i, what, 1);
+        row.append(a, span, b); return row;
+      };
+      el.appendChild(mk("breed", "breed", BREEDS[breed].name));
+      el.appendChild(mk("hat", "hat", HATS[hat].name));
+      if (mine) {
+        const rb = document.createElement("button"); rb.className = "pix small" + (ready ? "" : " go");
+        rb.textContent = ready ? "Ready! (undo)" : "I’m ready"; rb.onclick = () => this.toggleReady(i);
+        el.appendChild(rb);
+        const p = document.createElement("p"); p.className = "hint"; p.textContent = keysHint; el.appendChild(p);
+      } else {
+        const p = document.createElement("p"); p.className = ready ? "ready" : "hint";
+        p.textContent = ready ? "Ready!" : online ? (this.net.other() ? "Choosing…" : "Waiting to join…") : ""; el.appendChild(p);
+      }
+    }
+    document.getElementById("custom-hint").textContent = online
+      ? `Game ${this.net.code}. Each chicken needs a different breed. Hats are just for style.`
+      : "Each chicken needs a different breed. Hats are just for style.";
+  },
+  // ---- online screens ----
+  refreshOnline() {
+    if (this.screen !== "online") return;
+    const body = document.getElementById("online-body");
+    const room = this.net.room;
+    body.innerHTML = "";
+    const p = t => { const e = document.createElement("p"); e.textContent = t; return e; };
+    if (!room) {
+      if (typeof claude !== "undefined") body.append(p("Online play works when this page is open on claude.ai and you’re signed in."),
+        p("Share the page with your friend from the Share menu, then both of you open it and choose Play online."));
+      else body.append(p("Online play couldn’t load. Check your internet connection, then reload the page."));
+      return;
+    }
+    if (this.net.role === "host") {
+      body.append(p("Your game code"));
+      const c = document.createElement("p"); c.className = "code"; c.textContent = this.net.code; body.append(c);
+      body.append(p("Tell your friend this code. They open this same page, choose Play online, and join it."), p("Waiting for a second player…"));
+      return;
+    }
+    const hostBtn = document.createElement("button"); hostBtn.className = "pix go"; hostBtn.textContent = "Host a game";
+    hostBtn.onclick = async () => { hostBtn.disabled = true; try { await this.net.host(); } catch (e) { this.netLost("Couldn’t start a game right now. Try again in a moment."); return; } this.refreshOnline(); };
+    body.append(hostBtn);
+    const row = document.createElement("div"); row.className = "row"; row.style.marginTop = "12px";
+    const inp = document.createElement("input"); inp.className = "codebox"; inp.maxLength = 4; inp.placeholder = "CODE"; inp.setAttribute("aria-label", "Game code");
+    inp.autocomplete = "off"; inp.spellcheck = false;
+    const jb = document.createElement("button"); jb.className = "pix"; jb.textContent = "Join";
+    const doJoin = code => {
+      code = (code || "").toUpperCase().replace(/[^A-Z]/g, "");
+      if (code.length !== 4) { inp.focus(); return; }
+      this.joinGame(code);
+    };
+    jb.onclick = () => doJoin(inp.value);
+    inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") doJoin(inp.value); });
+    row.append(inp, jb); body.append(row);
+    const list = document.createElement("div"); list.className = "games"; list.id = "games-list";
+    body.append(list);
+    this.renderGameList();
+  },
+  async joinGame(code) {
+    try { await this.net.join(code); } catch (e) { this.netLost("Couldn’t join that game. Check the code and try again."); return; }
+    this.ready = [false, false];
+    const pending = setTimeout(() => { if (!this.net.hostPeer && this.net.role === "guest") this.netLost(`No game with the code ${code} was found.`); }, 15000);
+    this.joinTimer = pending;
+    this.modeSel = "online";
+    this.show("custom"); this.renderCustom();
+  },
+  onLobbyChange() { if (this.screen === "online" && !this.net.role) this.renderGameList(); },
+  renderGameList() {
+    const list = document.getElementById("games-list");
+    if (!list) return;
+    list.innerHTML = "";
+    if (this.net.kind === "peer") {
+      const p = document.createElement("p"); p.textContent = "Ask your friend for their four-letter game code."; list.append(p); return;
+    }
+    const games = [...new Set(this.net.openGames())].slice(0, 6);
+    if (!games.length) {
+      const p = document.createElement("p"); p.textContent = "No open games yet. Host one, or ask your friend for their code."; list.append(p); return;
+    }
+    const p = document.createElement("p"); p.textContent = "Open games right now"; list.append(p);
+    for (const g of games) {
+      const b = document.createElement("button"); b.className = "pix small"; b.textContent = "Join game " + g;
+      b.onclick = () => this.joinGame(g); list.append(b);
+    }
+  },
+  onOpponentJoined() { Sfx.play("pickup"); this.ready = [false, false]; this.net.setPresence({ scr: "custom" }); this.show("custom"); this.renderCustom(); },
+  onNetState() {
+    if (this.net.role === "guest" && this.net.hostPeer && this.joinTimer) { clearTimeout(this.joinTimer); this.joinTimer = null; }
+    if (this.net.role === "guest") {
+      const h = this.net.other();
+      if (h && h.presence) {
+        const scr = h.presence.scr;
+        if (scr === "custom" && this.screen !== "custom" && this.game.mode === "guest" && this.game.state === "over") {
+          this.game.state = "idle"; this.game.mode = "menu"; this.ready = [false, false];
+          this.net.setPresence({ ready: false }); this.show("custom");
+        }
+        if (this.net.hostPeer && this.ready[1] && h.presence.picks && h.presence.picks[0] === this.picks[1][0]) {
+          this.ready[1] = false; this.cycleBreed(1, 1); this.net.setPresence({ ready: false, picks: this.picks[1] });
+        }
+      }
+    }
+    if (this.screen === "custom") { this.renderCustom(); this.maybeStart(); }
+  },
+  onHostSnapshot(snap) {
+    if (this.net.role !== "guest") return;
+    if (this.game.mode !== "guest") {
+      this.game.mode = "guest"; this.game.chickens = []; this.game.lastEvent = -1; this.game.particles = [];
+      if (this.screen === "custom") this.show(null);
+    }
+    const wasOver = this.game.state === "over";
+    this.game.applySnapshot(snap);
+    if (this.game.state === "over" && !wasOver) this.showOver();
+  },
+  netLost(msg) {
+    this.net.leave();
+    this.game.state = "idle"; this.game.mode = "menu"; this.game.arena = getArena(0); this.game.chickens = [];
+    document.getElementById("msg-title").textContent = "Game ended";
+    document.getElementById("msg-body").textContent = msg;
+    this.show("msg");
+  },
+  sendGuestInput() {
+    const has = a => KEYS_ANY[a].some(k => keysDown.has(k));
+    const gi = this.guestInp;
+    gi.b = (has("left") ? 1 : 0) | (has("right") ? 2 : 0) | (has("jump") ? 4 : 0) | (has("crouch") ? 8 : 0) | (has("shoot") ? 16 : 0) | (has("pickup") ? 32 : 0);
+    const key = `${gi.b}|${gi.j}|${gi.s}|${gi.p}`;
+    if (key !== this.sentInp) { this.sentInp = key; this.net.setPresence({ inp: { b: gi.b, j: gi.j, s: gi.s, p: gi.p } }); }
+  },
+  // ---- pause / over ----
+  pause() {
+    if (this.game.state !== "play") return;
+    const online = this.game.mode === "host" || this.game.mode === "guest";
+    if (!online) this.game.state = "paused";
+    document.getElementById("pause-title").textContent = online ? "Leave the game?" : "Paused";
+    document.querySelector('#scr-pause [data-act="quit"]').textContent = online ? "Leave game" : "Quit to title";
+    this.show("pause");
+  },
+  showOver() {
+    const g = this.game, win = g.scores[0] >= g.scores[1] ? 0 : 1, ch = g.chickens[win];
+    const art = document.getElementById("winner-art"), x = art.getContext("2d");
+    x.clearRect(0, 0, art.width, art.height); x.imageSmoothingEnabled = false;
+    x.drawImage(chickenSprite(ch.breed, ch.hat, false, "idle", 1, false), 0, 0, CW * 5, CH * 5);
+    const you = ch.label === "You";
+    document.getElementById("over-title").textContent = you ? "You’re the last chicken standing!" : `${ch.label} is the last chicken standing!`;
+    document.getElementById("over-score").textContent = `${BREEDS[ch.breed].name}, final score ${g.scores[0]} to ${g.scores[1]}`;
+    const btns = document.getElementById("over-buttons");
+    btns.innerHTML = "";
+    const mk = (t, fn, go) => { const b = document.createElement("button"); b.className = "pix" + (go ? " go" : ""); b.textContent = t; b.onclick = fn; btns.append(b); };
+    if (g.mode === "guest") {
+      const p = document.createElement("p"); p.textContent = "The host can start a rematch."; btns.append(p);
+      mk("Leave", () => this.quit());
+    } else if (g.mode === "host") {
+      mk("Rematch", () => { this.game.state = "idle"; this.game.mode = "menu"; this.ready = [false, false]; this.net.setPresence({ scr: "custom", snap: null, ready: false }); this.show("custom"); this.renderCustom(); }, true);
+      mk("Leave", () => this.quit());
+    } else {
+      mk("Rematch", () => { this.ready = [false, this.modeSel === "cpu"]; this.prepCustom(); }, true);
+      mk("Title screen", () => this.quit());
+    }
+    this.show("over");
+  },
+  onKey(e) {
+    if (e.target && e.target.tagName === "INPUT") return;
+    Sfx.ensure();
+    const code = e.code;
+    const gameKeys = ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Slash", "Period"];
+    if (this.game.state === "play" && !this.screen) {
+      if (gameKeys.includes(code)) e.preventDefault();
+      if (code === "Escape" || code === "KeyP") { this.pause(); return; }
+      if (!e.repeat && this.game.mode === "guest") {
+        if (KEYS_ANY.jump.includes(code)) this.guestInp.j++;
+        if (KEYS_ANY.shoot.includes(code)) this.guestInp.s++;
+        if (KEYS_ANY.pickup.includes(code)) this.guestInp.p++;
+      }
+    }
+    if (code === "KeyM" && !e.repeat) { Sfx.muted = !Sfx.muted; }
+    keysDown.add(code);
+    if (this.screen === "pause" && (code === "Escape" || code === "KeyP")) { this.act("resume"); return; }
+    if (this.screen === "custom" && !e.repeat) {
+      const local = this.localSides();
+      const online = this.modeSel === "online";
+      const maps = online ? [[0, { KeyW: ["breed", -1], KeyS: ["breed", 1], KeyA: ["hat", -1], KeyD: ["hat", 1],
+          ArrowUp: ["breed", -1], ArrowDown: ["breed", 1], ArrowLeft: ["hat", -1], ArrowRight: ["hat", 1] }, ["KeyF", "KeyG", "Slash", "Period"]]]
+        : [[0, { KeyW: ["breed", -1], KeyS: ["breed", 1], KeyA: ["hat", -1], KeyD: ["hat", 1] }, ["KeyF", "KeyG"]],
+           [1, { ArrowUp: ["breed", -1], ArrowDown: ["breed", 1], ArrowLeft: ["hat", -1], ArrowRight: ["hat", 1] }, ["Slash", "Period", "ControlRight", "ShiftRight"]]];
+      for (const [slot, moves, readyKeys] of maps) {
+        const i = online ? local[0] : slot;
+        if (!local.includes(i)) continue;
+        if (moves[code]) { e.preventDefault(); this.change(i, ...moves[code]); }
+        else if (readyKeys.includes(code)) { e.preventDefault(); this.toggleReady(i); }
+      }
+      if (code === "Escape") this.act("back");
+    }
+    if (this.screen === "over" && code === "Escape") this.quit();
+    if (this.screen === "help" && code === "Escape") this.act("help-back");
+  },
+};
+
+if (typeof window !== "undefined" && !window.__CLUCK_TEST__) {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => App.init());
+  else App.init();
+}
+</script>
+</body>
+</html>
